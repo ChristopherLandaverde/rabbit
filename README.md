@@ -2,7 +2,23 @@
 
 A comprehensive FastAPI-based service for analyzing marketing touchpoint data and applying attribution models to transform raw customer journey data into actionable insights with confidence scoring.
 
-## 🚀 Features
+## Table of Contents
+
+- [Features](#features)
+- [Project Structure](#project-structure)
+- [Quick Start](#quick-start)
+- [API Documentation](#api-documentation)
+- [Data Format](#data-format)
+- [Attribution Models](#attribution-models)
+- [Configuration](#configuration)
+- [Testing](#testing)
+- [Development](#development)
+- [Deployment](#deployment)
+- [Performance](#performance)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Features
 
 - **Multiple Attribution Models**: Linear, Time Decay, First Touch, Last Touch, Position-Based
 - **Identity Resolution**: Automatic customer journey linking with adaptive method selection
@@ -12,7 +28,7 @@ A comprehensive FastAPI-based service for analyzing marketing touchpoint data an
 - **File Format Support**: CSV, JSON, and Parquet files
 - **Production Ready**: Proper error handling, logging, and configuration management
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 project-root/
@@ -31,37 +47,48 @@ project-root/
 └── run.py                 # Application entry point
 ```
 
-## 🏃‍♂️ Quick Start
+## Quick Start
 
-### 1. Install Dependencies
+### Prerequisites
 
-```bash
-pip install -r requirements.txt
-```
+- Python 3.8+
+- pip
 
-### 2. Run the Application
+### Installation
 
-```bash
-python run.py
-```
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/ChristopherLandaverde/rabbit.git
+   cd rabbit
+   ```
 
-The API will be available at `http://localhost:8000`
+2. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### 3. Test the API
+3. **Run the application**
+   ```bash
+   python run.py
+   ```
 
-Visit `http://localhost:8000/docs` for the interactive API documentation.
+4. **Access the API**
+   - API: `http://localhost:8000`
+   - Interactive Docs: `http://localhost:8000/docs`
+   - Health Check: `http://localhost:8000/health`
 
-## 📡 API Endpoints
+## API Documentation
 
-### Health Check
-- `GET /health` - Check API health status
+### Endpoints
 
-### Attribution Analysis
-- `POST /attribution/analyze` - Analyze attribution from uploaded data
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check endpoint |
+| `POST` | `/attribution/analyze` | Analyze attribution from uploaded data |
 
-## 💡 Example Usage
+### Example Usage
 
-Upload a CSV file with touchpoint data:
+**Upload and analyze attribution data:**
 
 ```bash
 curl -X POST "http://localhost:8000/attribution/analyze" \
@@ -70,77 +97,183 @@ curl -X POST "http://localhost:8000/attribution/analyze" \
   -F "model_type=linear"
 ```
 
-## 📊 Data Format
+**Response format:**
+```json
+{
+  "results": {
+    "total_conversions": 3,
+    "total_revenue": 225.0,
+    "channel_attributions": {
+      "email": {
+        "credit": 0.4,
+        "conversions": 1,
+        "revenue": 90.0,
+        "confidence": 0.85
+      }
+    },
+    "overall_confidence": 0.82
+  },
+  "metadata": {
+    "model_used": "linear",
+    "data_points_analyzed": 10,
+    "processing_time_ms": 150
+  },
+  "insights": [
+    {
+      "insight_type": "performance",
+      "title": "Top Performing Channel",
+      "description": "email is your top performing channel with 40.0% attribution credit.",
+      "recommendation": "Consider increasing investment in email to maximize ROI."
+    }
+  ]
+}
+```
 
-Your CSV file should include these columns:
+## Data Format
 
-- `timestamp`: When the touchpoint occurred (ISO format)
-- `channel`: Marketing channel (e.g., email, social, paid_search)
-- `event_type`: Type of event (view, click, conversion, purchase, signup)
-- `customer_id`: Customer identifier (optional)
-- `session_id`: Session identifier (optional)
-- `email`: Customer email (optional)
-- `conversion_value`: Value of conversion (optional)
+Your data file should include these columns:
 
-## 🎯 Attribution Models
+| Column | Required | Type | Description |
+|--------|----------|------|-------------|
+| `timestamp` | ✅ | DateTime | When the touchpoint occurred (ISO format) |
+| `channel` | ✅ | String | Marketing channel (e.g., email, social, paid_search) |
+| `event_type` | ✅ | String | Type of event (view, click, conversion, purchase, signup) |
+| `customer_id` | ❌ | String | Customer identifier |
+| `session_id` | ❌ | String | Session identifier |
+| `email` | ❌ | String | Customer email |
+| `conversion_value` | ❌ | Float | Value of conversion |
 
-- **linear**: Equal credit to all touchpoints
-- **time_decay**: More credit to recent touchpoints (configurable half-life)
-- **first_touch**: All credit to first touchpoint
-- **last_touch**: All credit to last touchpoint
-- **position_based**: Weighted credit by position (40% first, 40% last, 20% middle)
+### Sample Data
 
-## ⚙️ Configuration
+```csv
+timestamp,channel,event_type,customer_id,session_id,email,conversion_value
+2024-01-01 10:00:00,email,click,cust_001,sess_001,user1@example.com,
+2024-01-01 11:30:00,paid_search,click,cust_001,sess_002,user1@example.com,
+2024-01-01 13:00:00,email,conversion,cust_001,sess_004,user1@example.com,100.00
+```
+
+## Attribution Models
+
+### Available Models
+
+| Model | Description | Use Case |
+|-------|-------------|----------|
+| `linear` | Equal credit to all touchpoints | Balanced attribution across all channels |
+| `time_decay` | More credit to recent touchpoints | Recent touchpoints are more influential |
+| `first_touch` | All credit to first touchpoint | Focus on acquisition channels |
+| `last_touch` | All credit to last touchpoint | Focus on conversion channels |
+| `position_based` | Weighted by position (40% first, 40% last, 20% middle) | Balanced with emphasis on key touchpoints |
+
+### Model Parameters
+
+**Time Decay Model:**
+```bash
+curl -X POST "http://localhost:8000/attribution/analyze" \
+  -F "file=@data.csv" \
+  -F "model_type=time_decay" \
+  -F "half_life_days=7.0"
+```
+
+**Position-Based Model:**
+```bash
+curl -X POST "http://localhost:8000/attribution/analyze" \
+  -F "file=@data.csv" \
+  -F "model_type=position_based" \
+  -F "first_touch_weight=0.4" \
+  -F "last_touch_weight=0.4"
+```
+
+## Configuration
 
 Create a `.env` file to customize settings:
 
 ```env
-DEBUG=true
+# Application Settings
+DEBUG=false
+APP_NAME=Multi-Touch Attribution API
+VERSION=1.0.0
+
+# Server Configuration
+HOST=0.0.0.0
+PORT=8000
+
+# File Processing Limits
 MAX_FILE_SIZE_MB=100
+MAX_CONCURRENT_REQUESTS=10
+MAX_MEMORY_USAGE_GB=2.0
+
+# Attribution Model Defaults
 DEFAULT_TIME_DECAY_HALF_LIFE_DAYS=7.0
+CONFIDENCE_THRESHOLD=0.7
+
+# Data Quality Thresholds
+MINIMUM_DATA_COMPLETENESS=0.8
+MINIMUM_DATA_CONSISTENCY=0.7
+
+# Logging
 LOG_LEVEL=INFO
 ```
 
-## 🧪 Testing
+## Testing
 
-Run the test suite:
+### Run Tests
 
 ```bash
+# Run all tests
 pytest tests/
+
+# Run with coverage
+pytest --cov=src tests/
+
+# Run specific test file
+pytest tests/test_attribution.py
+
+# Run with verbose output
+pytest -v tests/
 ```
 
-## 📚 Documentation
+### Test Data
 
-Comprehensive documentation is available in the `docs/` directory:
+Use the included `test_data.csv` file for testing:
 
-- **[API Specification](docs/api/specification.md)** - OpenAPI 3.0.3 specification
-- **[Architecture](docs/technical/architecture.md)** - System design and patterns
-- **[Testing Strategy](docs/technical/testing-strategy.md)** - Testing approach
-- **[Implementation Guide](docs/development/implementation_guide.md)** - Build instructions
+```bash
+curl -X POST "http://localhost:8000/attribution/analyze" \
+  -F "file=@test_data.csv" \
+  -F "model_type=linear"
+```
 
-## 🔧 Development
+## Development
 
 ### Code Standards
-- Follow PEP 8 with 88-character line length (Black formatter)
-- Use type hints for all functions
-- Implement proper error handling with structured responses
-- Follow async/await patterns for I/O operations
+
+- **Style**: Follow PEP 8 with 88-character line length (Black formatter)
+- **Type Hints**: Use type hints for all functions
+- **Error Handling**: Implement structured error responses
+- **Async Patterns**: Use async/await for I/O operations
 
 ### Attribution Model Implementation
+
 All attribution models implement the strategy pattern:
 
 ```python
+from abc import ABC, abstractmethod
+from typing import Dict
+from src.models.touchpoint import CustomerJourney
+
 class AttributionModel(ABC):
     @abstractmethod
     def calculate_attribution(self, journey: CustomerJourney) -> Dict[str, float]:
+        """Calculate attribution credit for each channel."""
         pass
 ```
 
 ### Identity Resolution
+
 Automatic method selection based on data quality:
 
 ```python
 def select_linking_method(df: pd.DataFrame) -> LinkingMethod:
+    """Select the best linking method based on data quality."""
     if 'customer_id' in df.columns and df['customer_id'].notna().mean() > 0.8:
         return LinkingMethod.CUSTOMER_ID
     elif 'session_id' in df.columns and 'email' in df.columns:
@@ -151,35 +284,101 @@ def select_linking_method(df: pd.DataFrame) -> LinkingMethod:
         return LinkingMethod.AGGREGATE
 ```
 
-## 🚀 Deployment
+### Adding New Attribution Models
 
-The application is production-ready with:
+1. Create a new model class in `src/core/attribution/`
+2. Implement the `AttributionModel` interface
+3. Add the model type to `AttributionModelType` enum
+4. Register the model in `AttributionModelFactory`
 
-- Proper error handling and logging
-- Configuration management
-- File size and memory limits
-- CORS support
-- Health check endpoints
+## Deployment
 
-## 📈 Performance Requirements
+### Docker (Recommended)
 
-- Process files up to 10MB in <5 seconds
-- Process files up to 100MB in <5 minutes
-- Memory usage <2GB per request
-- Support 10 concurrent requests per API key
+```dockerfile
+FROM python:3.11-slim
 
-## 🤝 Contributing
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/new-feature`
-3. Make your changes following the coding standards
-4. Add tests for new functionality
-5. Submit a pull request
+COPY src/ ./src/
+COPY run.py .
 
-## 📄 License
+EXPOSE 8000
+CMD ["python", "run.py"]
+```
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+### Environment Variables
+
+Set these environment variables in production:
+
+```bash
+export DEBUG=false
+export LOG_LEVEL=INFO
+export MAX_FILE_SIZE_MB=100
+export MAX_CONCURRENT_REQUESTS=10
+```
+
+## Performance
+
+### Benchmarks
+
+| File Size | Processing Time | Memory Usage |
+|-----------|----------------|--------------|
+| 10MB | <5 seconds | <500MB |
+| 100MB | <5 minutes | <2GB |
+
+### Optimization Tips
+
+- Use Parquet format for large datasets
+- Ensure proper indexing on timestamp columns
+- Monitor memory usage with large concurrent requests
+
+## Documentation
+
+Comprehensive documentation is available in the `docs/` directory:
+
+- **[API Specification](docs/api/specification.md)** - OpenAPI 3.0.3 specification
+- **[Architecture](docs/technical/architecture.md)** - System design and patterns
+- **[Testing Strategy](docs/technical/testing-strategy.md)** - Testing approach
+- **[Implementation Guide](docs/development/implementation_guide.md)** - Build instructions
+
+## Contributing
+
+1. **Fork the repository**
+2. **Create a feature branch**
+   ```bash
+   git checkout -b feature/new-feature
+   ```
+3. **Make your changes** following the coding standards
+4. **Add tests** for new functionality
+5. **Submit a pull request**
+
+### Development Setup
+
+```bash
+# Install development dependencies
+pip install -r requirements.txt
+
+# Install pre-commit hooks (optional)
+pre-commit install
+
+# Run code formatting
+black src/ tests/
+isort src/ tests/
+
+# Run linting
+flake8 src/ tests/
+mypy src/
+```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-This project provides a complete foundation for building a production-ready attribution API that delivers reliable, confidence-scored marketing insights.
+**Built with ❤️ for marketing analytics teams**
+
+For questions or support, please open an issue on GitHub.
