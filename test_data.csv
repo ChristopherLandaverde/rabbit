@@ -1,0 +1,11 @@
+timestamp,channel,event_type,customer_id,session_id,email,campaign_id,conversion_value
+2024-01-01 10:00:00,email,click,cust_001,sess_001,user1@example.com,camp_001,
+2024-01-01 11:30:00,paid_search,click,cust_001,sess_002,user1@example.com,camp_002,
+2024-01-01 12:00:00,social,view,cust_001,sess_003,user1@example.com,camp_003,
+2024-01-01 13:00:00,email,conversion,cust_001,sess_004,user1@example.com,camp_001,100.00
+2024-01-02 09:00:00,organic,view,cust_002,sess_005,user2@example.com,camp_004,
+2024-01-02 10:30:00,paid_search,click,cust_002,sess_006,user2@example.com,camp_005,
+2024-01-02 11:00:00,email,conversion,cust_002,sess_007,user2@example.com,camp_006,75.00
+2024-01-03 14:00:00,social,view,cust_003,sess_008,user3@example.com,camp_007,
+2024-01-03 15:00:00,email,click,cust_003,sess_009,user3@example.com,camp_008,
+2024-01-03 16:00:00,organic,conversion,cust_003,sess_010,user3@example.com,camp_009,50.00
