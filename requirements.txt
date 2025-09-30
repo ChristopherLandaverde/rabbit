@@ -1,7 +1,7 @@
 # FastAPI and web framework dependencies
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-python-multipart==0.0.6
+python-multipart==0.0.18
 
 # Data processing and analysis
 pandas==2.1.4
