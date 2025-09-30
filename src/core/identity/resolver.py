@@ -8,9 +8,12 @@ from ...models.touchpoint import Touchpoint
 
 def select_linking_method(df: pd.DataFrame) -> LinkingMethod:
     """Select the best linking method based on data quality."""
-    if 'customer_id' in df.columns and df['customer_id'].notna().mean() > 0.8:
-        return LinkingMethod.CUSTOMER_ID
-    elif 'session_id' in df.columns and 'email' in df.columns:
+    if 'customer_id' in df.columns:
+        # Check for non-null, non-NaN values
+        valid_customer_ids = df['customer_id'].notna() & (df['customer_id'].notnull()) & (df['customer_id'] != '') & (df['customer_id'].astype(str).str.strip() != '')
+        if valid_customer_ids.mean() > 0.8:
+            return LinkingMethod.CUSTOMER_ID
+    if 'session_id' in df.columns and 'email' in df.columns:
         return LinkingMethod.SESSION_EMAIL
     elif 'email' in df.columns:
         return LinkingMethod.EMAIL_ONLY
@@ -44,11 +47,13 @@ class IdentityResolver:
         identity_map = {}
         
         for idx, row in df.iterrows():
-            customer_id = str(row.get('customer_id', ''))
-            if customer_id and customer_id != 'nan':
-                if customer_id not in identity_map:
-                    identity_map[customer_id] = []
-                identity_map[customer_id].append(idx)
+            customer_id = row.get('customer_id')
+            # Check for None, NaN, and empty string
+            if pd.notna(customer_id) and customer_id is not None and str(customer_id).strip():
+                customer_id_str = str(customer_id)
+                if customer_id_str not in identity_map:
+                    identity_map[customer_id_str] = []
+                identity_map[customer_id_str].append(idx)
         
         return identity_map
     

@@ -33,7 +33,8 @@ class TestLinkingMethodSelection:
         })
         
         method = select_linking_method(df)
-        assert method == LinkingMethod.CUSTOMER_ID
+        # With 66% completion, should fall back to aggregate
+        assert method == LinkingMethod.AGGREGATE
     
     def test_select_session_email_method(self):
         """Test selection of session_email method when both columns exist."""

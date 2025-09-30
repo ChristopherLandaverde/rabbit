@@ -36,15 +36,16 @@ class TimeDecayAttributionModel(AttributionModel):
         weights = {}
         
         # Calculate weights for each touchpoint
-        for touchpoint in journey.touchpoints:
+        for i, touchpoint in enumerate(journey.touchpoints):
             days_before_conversion = (conversion_time - touchpoint.timestamp).days
             weight = 2 ** (-days_before_conversion / self.half_life_days)
-            weights[touchpoint] = weight
+            weights[i] = weight
             total_weight += weight
         
         # Calculate attribution
         attribution = {}
-        for touchpoint, weight in weights.items():
+        for i, touchpoint in enumerate(journey.touchpoints):
+            weight = weights[i]
             credit = weight / total_weight
             if touchpoint.channel in attribution:
                 attribution[touchpoint.channel] += credit

@@ -36,6 +36,8 @@ class BusinessInsight(BaseModel):
 
 class AnalysisMetadata(BaseModel):
     """Metadata about the attribution analysis."""
+    model_config = {"protected_namespaces": ()}
+    
     model_used: str = Field(..., description="Attribution model used")
     data_points_analyzed: int = Field(..., ge=0, description="Number of data points")
     time_range_start: datetime = Field(..., description="Analysis start time")

@@ -3,7 +3,7 @@
 from typing import List, Dict, Any
 from datetime import datetime
 import pandas as pd
-from ..models.validation import ValidationError
+from ...models.validation import ValidationError
 
 
 class DataQuality:

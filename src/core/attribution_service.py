@@ -15,6 +15,7 @@ from ..models.attribution import (
 from ..models.touchpoint import CustomerJourney
 from ..models.enums import AttributionModelType, LinkingMethod
 from .attribution.factory import AttributionModelFactory
+from .attribution.base import AttributionModel
 from .identity.resolver import IdentityResolver, select_linking_method
 from .identity.journey_builder import JourneyBuilder
 from .validation.validators import DataQuality, validate_required_columns, validate_data_types, validate_data_quality

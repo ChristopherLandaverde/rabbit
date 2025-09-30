@@ -60,7 +60,7 @@ def sample_journey():
             email="user1@example.com"
         ),
         Touchpoint(
-            timestamp=datetime(2024, 1, 1, 11, 0, 0),
+            timestamp=datetime(2024, 1, 2, 11, 0, 0),  # 1 day later
             channel="social",
             event_type=EventType.VIEW,
             customer_id="cust_001",
@@ -68,7 +68,7 @@ def sample_journey():
             email="user1@example.com"
         ),
         Touchpoint(
-            timestamp=datetime(2024, 1, 1, 12, 0, 0),
+            timestamp=datetime(2024, 1, 3, 12, 0, 0),  # 2 days later
             channel="paid_search",
             event_type=EventType.CONVERSION,
             customer_id="cust_001",
