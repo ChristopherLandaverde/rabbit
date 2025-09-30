@@ -46,7 +46,7 @@ def main():
     args = parser.parse_args()
     
     # Base pytest command
-    cmd = ["python", "-m", "pytest"]
+    cmd = ["python3", "-m", "pytest"]
     
     # Add test selection
     if args.unit:
@@ -88,17 +88,17 @@ def main():
     
     # Run linting if tests pass
     if success and not args.performance:
-        lint_cmd = ["python", "-m", "flake8", "src/", "tests/"]
+        lint_cmd = ["python3", "-m", "flake8", "src/", "tests/"]
         lint_success = run_command(lint_cmd, "Code Linting")
         
         if lint_success:
-            type_cmd = ["python", "-m", "mypy", "src/"]
+            type_cmd = ["python3", "-m", "mypy", "src/"]
             type_success = run_command(type_cmd, "Type Checking")
             success = type_success
     
     # Run formatting check if all tests pass
     if success and not args.performance:
-        format_cmd = ["python", "-m", "black", "--check", "src/", "tests/"]
+        format_cmd = ["python3", "-m", "black", "--check", "src/", "tests/"]
         format_success = run_command(format_cmd, "Code Formatting Check")
         success = format_success
     
