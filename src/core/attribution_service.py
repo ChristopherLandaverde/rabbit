@@ -66,7 +66,7 @@ class AttributionService:
         
         # Step 5: Calculate attribution
         attribution_model = AttributionModelFactory.create_model(model_type, **model_kwargs)
-        channel_attributions = self._calculate_attribution(journeys, attribution_model)
+        channel_attributions = self._calculate_attribution(journeys, attribution_model, data_quality)
         
         # Step 6: Calculate confidence scores
         linking_accuracy = self.confidence_calculator.calculate_linking_accuracy(
@@ -114,7 +114,8 @@ class AttributionService:
     def _calculate_attribution(
         self, 
         journeys: List[CustomerJourney], 
-        model: AttributionModel
+        model: AttributionModel,
+        data_quality: DataQuality
     ) -> Dict[str, ChannelAttribution]:
         """Calculate attribution using the specified model."""
         # Only analyze journeys with conversions
@@ -125,6 +126,11 @@ class AttributionService:
         
         # Calculate aggregate attribution
         channel_credits = model.calculate_journey_attribution(converting_journeys)
+        
+        # Normalize credits to ensure they sum to 1.0
+        total_credit = sum(channel_credits.values())
+        if total_credit > 0:
+            channel_credits = {channel: credit / total_credit for channel, credit in channel_credits.items()}
         
         # Build ChannelAttribution objects
         channel_attributions = {}
@@ -143,7 +149,7 @@ class AttributionService:
             )
             
             channel_confidence = self.confidence_calculator.calculate_channel_confidence(
-                channel, channel_touchpoints, len(converting_journeys), None
+                channel, channel_touchpoints, len(converting_journeys), data_quality
             )
             
             channel_attributions[channel] = ChannelAttribution(

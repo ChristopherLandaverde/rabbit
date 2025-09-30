@@ -2,7 +2,8 @@
 
 from typing import List, Optional
 from datetime import datetime
-from pydantic import BaseModel, Field
+import pandas as pd
+from pydantic import BaseModel, Field, field_validator
 from .enums import EventType
 
 
@@ -18,6 +19,14 @@ class Touchpoint(BaseModel):
     creative_id: Optional[str] = Field(None, description="Creative/ad identifier")
     cost: Optional[float] = Field(None, ge=0.0, description="Cost associated with touchpoint")
     conversion_value: Optional[float] = Field(None, ge=0.0, description="Conversion value")
+    
+    @field_validator('conversion_value', mode='before')
+    @classmethod
+    def validate_conversion_value(cls, v):
+        """Handle NaN values in conversion_value."""
+        if pd.isna(v) or v is None:
+            return None
+        return float(v)
 
 
 class CustomerJourney(BaseModel):
