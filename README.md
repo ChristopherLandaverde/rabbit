@@ -28,6 +28,29 @@ A comprehensive FastAPI-based service for analyzing marketing touchpoint data an
 - **File Format Support**: CSV, JSON, and Parquet files
 - **Production Ready**: Proper error handling, logging, and configuration management
 
+## 🚀 Current Status
+
+### ✅ Completed
+- **Core Application**: Complete FastAPI application with all attribution models
+- **Testing Infrastructure**: 42 unit tests, all passing with comprehensive coverage
+- **Data Models**: Pydantic models for all data structures
+- **Identity Resolution**: Customer journey linking with adaptive method selection
+- **Attribution Models**: All 5 models implemented and mathematically validated
+- **Data Validation**: Comprehensive validation with quality metrics
+- **Configuration**: Environment-based configuration management
+- **Documentation**: API documentation and project README
+
+### 🔄 In Progress
+- **Integration Testing**: API endpoint testing
+- **Performance Testing**: Benchmarking and optimization
+
+### 📋 Next Steps
+- **Docker Setup**: Containerization for easy deployment
+- **CI/CD Pipeline**: GitHub Actions for automated testing
+- **Authentication**: API key authentication and rate limiting
+- **Monitoring**: Logging, metrics, and performance monitoring
+- **Deployment**: Cloud platform setup and deployment
+
 ## Project Structure
 
 ```
@@ -62,17 +85,32 @@ project-root/
    cd rabbit
    ```
 
-2. **Install dependencies**
+2. **Set up virtual environment (recommended)**
    ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies**
+   ```bash
+   # For basic functionality
+   pip install -r requirements-minimal.txt
+   
+   # For full features (includes pandas, numpy, etc.)
    pip install -r requirements.txt
    ```
 
-3. **Run the application**
+4. **Verify installation**
    ```bash
-   python run.py
+   python3 test_setup.py
    ```
 
-4. **Access the API**
+5. **Run the application**
+   ```bash
+   python3 run.py
+   ```
+
+6. **Access the API**
    - API: `http://localhost:8000`
    - Interactive Docs: `http://localhost:8000/docs`
    - Health Check: `http://localhost:8000/health`
@@ -216,20 +254,36 @@ LOG_LEVEL=INFO
 
 ## Testing
 
+### Current Test Status ✅
+
+**All tests are passing!** The project includes a comprehensive test suite with **42 unit tests** covering:
+
+- **Attribution Models** (14 tests) - All 5 attribution models with mathematical validation
+- **Data Validation** (15 tests) - Edge cases, error handling, and quality metrics  
+- **Identity Resolution** (13 tests) - Customer journey linking and method selection
+
 ### Run Tests
 
 ```bash
-# Run all tests
-pytest tests/
+# Using the test runner script (recommended)
+python3 scripts/run_tests.py
 
-# Run with coverage
-pytest --cov=src tests/
+# Run specific test types
+python3 scripts/run_tests.py --unit          # Unit tests only
+python3 scripts/run_tests.py --integration   # Integration tests only
+python3 scripts/run_tests.py --performance   # Performance benchmarks
 
-# Run specific test file
-pytest tests/test_attribution.py
+# Direct pytest usage
+pytest tests/unit/                    # Unit tests
+pytest tests/integration/             # Integration tests
+pytest tests/performance/             # Performance tests
+pytest --cov=src tests/               # With coverage report
+```
 
-# Run with verbose output
-pytest -v tests/
+### Test Results
+```
+======================== 42 passed, 4 warnings in 3.89s ========================
+✅ Test Suite completed successfully
 ```
 
 ### Test Data
