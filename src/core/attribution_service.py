@@ -1,7 +1,7 @@
 """Main attribution service that orchestrates the attribution process."""
 
 import time
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 import pandas as pd
 
@@ -19,7 +19,9 @@ from .attribution.base import AttributionModel
 from .identity.resolver import IdentityResolver, select_linking_method
 from .identity.journey_builder import JourneyBuilder
 from .validation.validators import DataQuality, validate_required_columns, validate_data_types, validate_data_quality
-from .confidence import ConfidenceCalculator
+from .confidence import ConfidenceScorer
+from .journey_analysis import JourneyAnalyzer
+from .business_insights import BusinessInsightsGenerator
 
 
 class AttributionService:
@@ -27,7 +29,9 @@ class AttributionService:
     
     def __init__(self):
         self.journey_builder = JourneyBuilder()
-        self.confidence_calculator = ConfidenceCalculator()
+        self.confidence_scorer = ConfidenceScorer()
+        self.journey_analyzer = JourneyAnalyzer()
+        self.insights_generator = BusinessInsightsGenerator()
     
     async def analyze_attribution(
         self,
@@ -68,15 +72,21 @@ class AttributionService:
         attribution_model = AttributionModelFactory.create_model(model_type, **model_kwargs)
         channel_attributions = self._calculate_attribution(journeys, attribution_model, data_quality)
         
-        # Step 6: Calculate confidence scores
-        linking_accuracy = self.confidence_calculator.calculate_linking_accuracy(
-            journeys, linking_method
+        # Step 6: Perform journey analysis
+        journey_analysis = self._perform_journey_analysis(df, journeys)
+        
+        # Step 7: Calculate confidence scores
+        model_fit_score = self.confidence_scorer.calculate_model_fit_score(
+            df, str(model_type), channel_attributions
         )
-        overall_confidence = self.confidence_calculator.calculate_confidence(
-            data_quality, linking_accuracy, len(journeys), len(df)
+        identity_resolution_confidence = self.confidence_scorer.calculate_identity_resolution_confidence(
+            df, str(linking_method)
+        )
+        overall_confidence = self.confidence_scorer.calculate_overall_confidence(
+            data_quality, len(df), model_fit_score, identity_resolution_confidence
         )
         
-        # Step 7: Build results
+        # Step 8: Build results
         processing_time = int((time.time() - start_time) * 1000)
         
         results = self._build_attribution_results(
@@ -87,7 +97,10 @@ class AttributionService:
             model_type, df, journeys, linking_method, processing_time
         )
         
-        insights = self._generate_business_insights(results, data_quality)
+        # Step 9: Generate comprehensive business insights
+        insights = self._generate_comprehensive_insights(
+            results, journey_analysis, data_quality, len(df), df
+        )
         
         return AttributionResponse(
             results=results,
@@ -148,8 +161,8 @@ class AttributionService:
                 for j in converting_journeys
             )
             
-            channel_confidence = self.confidence_calculator.calculate_channel_confidence(
-                channel, channel_touchpoints, len(converting_journeys), data_quality
+            channel_confidence = self.confidence_scorer.calculate_channel_confidence(
+                channel_data, total_conversions, credit
             )
             
             channel_attributions[channel] = ChannelAttribution(
@@ -234,6 +247,64 @@ class AttributionService:
                 description=f"Data completeness is {data_quality.completeness:.1%}, below the recommended 80%.",
                 impact_score=1.0 - data_quality.completeness,
                 recommendation="Improve data collection processes to capture more complete customer journey data."
+            ))
+        
+        return insights
+    
+    def _perform_journey_analysis(self, df: pd.DataFrame, journeys: List[CustomerJourney]) -> Dict[str, Any]:
+        """Perform comprehensive journey analysis."""
+        journey_analysis = {}
+        
+        # Analyze journey lengths
+        journey_analysis.update(self.journey_analyzer.analyze_journey_lengths(df))
+        
+        # Analyze conversion paths
+        journey_analysis.update(self.journey_analyzer.analyze_conversion_paths(df))
+        
+        # Analyze time to conversion
+        journey_analysis.update(self.journey_analyzer.analyze_time_to_conversion(df))
+        
+        return journey_analysis
+    
+    def _generate_comprehensive_insights(
+        self,
+        results: AttributionResults,
+        journey_analysis: Dict[str, Any],
+        data_quality: DataQuality,
+        sample_size: int,
+        df: pd.DataFrame
+    ) -> List[BusinessInsight]:
+        """Generate comprehensive business insights."""
+        # Convert attribution results to simple dict for insights generator
+        attribution_dict = {
+            channel: attr.credit 
+            for channel, attr in results.channel_attributions.items()
+        }
+        
+        # Convert data quality to dict
+        data_quality_dict = {
+            'completeness': data_quality.completeness,
+            'consistency': data_quality.consistency,
+            'freshness': data_quality.freshness
+        }
+        
+        # Generate insights
+        insights_data = self.insights_generator.generate_comprehensive_insights(
+            attribution_dict,
+            journey_analysis,
+            data_quality_dict,
+            sample_size
+        )
+        
+        # Convert to BusinessInsight objects
+        insights = []
+        for insight_data in insights_data:
+            insights.append(BusinessInsight(
+                insight_type=insight_data['type'],
+                title=insight_data['title'],
+                description=insight_data['description'],
+                impact_score=insight_data['impact_score'],
+                recommendation=insight_data.get('recommendation')
             ))
         
         return insights

@@ -1,6 +1,6 @@
 """Attribution-related Pydantic models."""
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -53,3 +53,28 @@ class AttributionResponse(BaseModel):
     insights: Optional[List[BusinessInsight]] = Field(
         None, description="Business insights generated"
     )
+
+
+class SchemaDetection(BaseModel):
+    """Schema detection results."""
+    detected_columns: Dict[str, str] = Field(..., description="Detected column names and types")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Schema detection confidence")
+    required_columns_present: bool = Field(..., description="Whether all required columns are present")
+
+
+class DataQualityMetrics(BaseModel):
+    """Data quality assessment metrics."""
+    completeness: float = Field(..., ge=0.0, le=1.0, description="Data completeness score")
+    consistency: float = Field(..., ge=0.0, le=1.0, description="Data consistency score")
+    freshness: float = Field(..., ge=0.0, le=1.0, description="Data freshness score")
+    overall_quality: float = Field(..., ge=0.0, le=1.0, description="Overall data quality score")
+
+
+class ValidationResponse(BaseModel):
+    """Data validation response."""
+    valid: bool = Field(..., description="Whether the data is valid for analysis")
+    schema_detection: SchemaDetection = Field(..., description="Schema detection results")
+    data_quality: DataQualityMetrics = Field(..., description="Data quality metrics")
+    errors: List[Dict[str, Any]] = Field(..., description="Validation errors found")
+    recommendations: List[str] = Field(..., description="Recommendations for data improvement")
+    warnings: List[str] = Field(..., description="Non-critical warnings")

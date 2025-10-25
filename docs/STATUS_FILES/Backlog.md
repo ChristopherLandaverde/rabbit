@@ -1,27 +1,27 @@
 # Development Backlog
 
-## Current Sprint: Testing Infrastructure
+## Current Sprint: Phase 3 - Core Integration
 
 ### High Priority (This Week)
-- [ ] Set up pytest configuration and test runner
-- [ ] Create test fixtures for sample data files
-- [ ] Implement ground truth datasets for validation
-- [ ] Write algorithm correctness tests for linear attribution
-- [ ] Add CSV parsing tests with edge cases
+- [ ] Implement /attribution/validate endpoint for data validation
+- [ ] Implement /attribution/methods endpoint to list available models
+- [ ] Enhance /attribution/analyze endpoint with confidence scoring
+- [ ] Implement confidence scoring system for attribution results
+- [ ] Add journey analysis features for customer path insights
 
 ### Medium Priority (Next Week)
-- [ ] Complete all attribution model tests
-- [ ] Add file processing error handling tests
-- [ ] Implement API endpoint contract tests
-- [ ] Create performance benchmark tests
-- [ ] Add test coverage reporting
+- [ ] Implement business insights generation
+- [ ] Enhance error handling with comprehensive error responses
+- [ ] Add file upload processing improvements
+- [ ] Implement data quality metrics
+- [ ] Add performance optimizations
 
 ### Low Priority (Future Sprints)
-- [ ] Load testing with large datasets
-- [ ] Security penetration testing
-- [ ] Cross-platform compatibility tests
-- [ ] Documentation accuracy validation
-- [ ] Integration test automation
+- [ ] Advanced journey analysis features
+- [ ] Business insights automation
+- [ ] API rate limiting implementation
+- [ ] Enhanced monitoring and logging
+- [ ] Documentation updates
 
 ## Technical Debt
 - [ ] Refactor data validation error messages
