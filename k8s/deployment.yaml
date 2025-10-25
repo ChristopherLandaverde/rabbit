@@ -1,0 +1,230 @@
+# Kubernetes Deployment for Multi-Touch Attribution API
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: attribution-api
+  labels:
+    app: attribution-api
+    version: v1.0.0
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: attribution-api
+  template:
+    metadata:
+      labels:
+        app: attribution-api
+        version: v1.0.0
+    spec:
+      containers:
+      - name: attribution-api
+        image: attribution-api:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        # Security
+        - name: ENABLE_API_KEY_AUTH
+          value: "true"
+        - name: DEFAULT_RATE_LIMIT
+          value: "1000"
+        - name: API_KEY_TTL_SECONDS
+          value: "2592000"
+        
+        # Redis Configuration
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_DB
+          value: "0"
+        
+        # Logging
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: ENABLE_SECURITY_LOGGING
+          value: "true"
+        
+        # File Processing
+        - name: MAX_FILE_SIZE_MB
+          value: "100"
+        - name: MAX_CONCURRENT_REQUESTS
+          value: "10"
+        - name: MAX_MEMORY_USAGE_GB
+          value: "2.0"
+        
+        # Processing Timeouts
+        - name: PROCESSING_TIMEOUT_SECONDS
+          value: "300"
+        - name: SMALL_FILE_TIMEOUT_SECONDS
+          value: "5"
+        
+        # Attribution Model Defaults
+        - name: DEFAULT_TIME_DECAY_HALF_LIFE_DAYS
+          value: "7.0"
+        - name: CONFIDENCE_THRESHOLD
+          value: "0.7"
+        
+        # Data Quality Thresholds
+        - name: MINIMUM_DATA_COMPLETENESS
+          value: "0.8"
+        - name: MINIMUM_DATA_CONSISTENCY
+          value: "0.7"
+        
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+      
+      volumes:
+      - name: logs
+        emptyDir: {}
+      
+      restartPolicy: Always
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: attribution-api-service
+  labels:
+    app: attribution-api
+spec:
+  selector:
+    app: attribution-api
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  labels:
+    app: redis
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-pvc
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: attribution-api-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: attribution-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

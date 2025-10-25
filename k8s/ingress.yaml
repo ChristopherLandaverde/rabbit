@@ -1,0 +1,56 @@
+# Kubernetes Ingress for Multi-Touch Attribution API
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: attribution-api-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/client-max-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - api.attribution.example.com
+    secretName: attribution-api-tls
+  rules:
+  - host: api.attribution.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: attribution-api-service
+            port:
+              number: 8000
+
+---
+# Alternative: LoadBalancer Service (if not using Ingress)
+apiVersion: v1
+kind: Service
+metadata:
+  name: attribution-api-lb
+  labels:
+    app: attribution-api
+spec:
+  selector:
+    app: attribution-api
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: 8000
+    protocol: TCP
+    name: https
+  type: LoadBalancer

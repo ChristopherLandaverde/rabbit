@@ -1,4 +1,4 @@
-"""Attribution analysis endpoints."""
+"""Secure attribution analysis endpoints with authentication and caching."""
 
 from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
@@ -33,25 +33,33 @@ async def validate_data(
     
     Args:
         file: CSV, JSON, or Parquet file containing touchpoint data
+        current_user: Authenticated user information
         
     Returns:
         Data validation results with schema detection and quality metrics
     """
     try:
-        # Validate file size
+        # Validate file size and type
         file_content = await file.read()
         file_size_mb = len(file_content) / (1024 * 1024)
         
-        if file_size_mb > settings.max_file_size_mb:
-            raise HTTPException(
-                status_code=413,
-                detail={
-                    "error": "file_too_large",
-                    "message": f"File size {file_size_mb:.1f}MB exceeds maximum allowed size of {settings.max_file_size_mb}MB",
-                    "details": {"max_size_mb": settings.max_file_size_mb, "actual_size_mb": file_size_mb},
-                    "timestamp": datetime.utcnow().isoformat()
-                }
-            )
+        input_validator.validate_file_upload(len(file_content), file.filename)
+        
+        # Generate file hash for caching
+        file_hash = hashlib.sha256(file_content).hexdigest()
+        
+        # Check cache first
+        cached_result = attribution_cache.get_validation_result(file_hash)
+        if cached_result:
+            return ValidationResponse(**cached_result)
+        
+        # Log file upload
+        security_logger.log_file_upload(
+            current_user.get("user_id", "unknown"),
+            file.filename or "unknown",
+            len(file_content),
+            True
+        )
         
         # Parse file based on content type
         df = await _parse_uploaded_file(file_content, file.filename)
@@ -124,7 +132,7 @@ async def validate_data(
         # Determine if data is valid
         is_valid = len(error_dicts) == 0 and required_columns_present and overall_quality > 0.5
         
-        return ValidationResponse(
+        result = ValidationResponse(
             valid=is_valid,
             schema_detection=schema_detection,
             data_quality=data_quality_metrics,
@@ -133,9 +141,22 @@ async def validate_data(
             warnings=warnings
         )
         
+        # Cache the result
+        attribution_cache.set_validation_result(file_hash, result.dict())
+        
+        return result
+        
     except HTTPException:
         raise
     except Exception as e:
+        # Log validation error
+        security_logger.log_file_upload(
+            current_user.get("user_id", "unknown"),
+            file.filename or "unknown",
+            len(file_content) if 'file_content' in locals() else 0,
+            False
+        )
+        
         raise HTTPException(
             status_code=500,
             detail={
@@ -148,14 +169,28 @@ async def validate_data(
 
 
 @router.get("/methods")
-async def get_available_methods():
+async def get_available_methods(current_user: dict = Depends(get_current_user)):
     """
     Get available attribution models and linking methods.
     
+    Args:
+        current_user: Authenticated user information
+        
     Returns:
         List of available attribution models and linking methods with descriptions
     """
     try:
+        # Check cache first
+        cached_methods = api_cache.get_available_methods()
+        if cached_methods:
+            return cached_methods
+        
+        # Log API usage
+        business_logger.log_api_usage(
+            current_user.get("user_id", "unknown"),
+            "/attribution/methods"
+        )
+        
         attribution_models = [
             {
                 "name": "linear",
@@ -265,7 +300,7 @@ async def get_available_methods():
             }
         ]
         
-        return {
+        result = {
             "attribution_models": attribution_models,
             "linking_methods": linking_methods,
             "recommendations": {
@@ -276,6 +311,11 @@ async def get_available_methods():
                 "best_linking_method": "auto"
             }
         }
+        
+        # Cache the result
+        api_cache.set_available_methods(result)
+        
+        return result
         
     except Exception as e:
         raise HTTPException(
@@ -295,36 +335,49 @@ async def analyze_attribution(
     model_type: str = Form(...),
     half_life_days: Optional[float] = Form(None),
     first_touch_weight: Optional[float] = Form(None),
-    last_touch_weight: Optional[float] = Form(None)
+    last_touch_weight: Optional[float] = Form(None),
+    current_user: dict = Depends(validate_analysis_request)
 ):
     """
     Analyze attribution from uploaded data file.
     
     Args:
         file: CSV, JSON, or Parquet file containing touchpoint data
-        model_type: Attribution model to use (linear, time_decay, first_touch, last_touch, position_based)
+        model_type: Attribution model to use
         half_life_days: Half-life for time decay model (optional)
         first_touch_weight: First touch weight for position-based model (optional)
         last_touch_weight: Last touch weight for position-based model (optional)
+        current_user: Authenticated user information
         
     Returns:
         Attribution analysis results
     """
+    start_time = time.time()
+    
     try:
-        # Validate file size
+        # Validate file size and type
         file_content = await file.read()
         file_size_mb = len(file_content) / (1024 * 1024)
         
-        if file_size_mb > settings.max_file_size_mb:
-            raise HTTPException(
-                status_code=413,
-                detail={
-                    "error": "file_too_large",
-                    "message": f"File size {file_size_mb:.1f}MB exceeds maximum allowed size of {settings.max_file_size_mb}MB",
-                    "details": {"max_size_mb": settings.max_file_size_mb, "actual_size_mb": file_size_mb},
-                    "timestamp": datetime.utcnow().isoformat()
-                }
-            )
+        input_validator.validate_file_upload(len(file_content), file.filename)
+        
+        # Generate file hash for caching
+        file_hash = hashlib.sha256(file_content).hexdigest()
+        
+        # Validate model parameters
+        model_params = input_validator.validate_model_parameters(
+            model_type,
+            half_life_days=half_life_days,
+            first_touch_weight=first_touch_weight,
+            last_touch_weight=last_touch_weight
+        )
+        
+        # Check cache first
+        cached_result = attribution_cache.get_attribution_result(
+            file_hash, model_type, model_params
+        )
+        if cached_result:
+            return AttributionResponse(**cached_result)
         
         # Parse file based on content type
         df = await _parse_uploaded_file(file_content, file.filename)
@@ -343,19 +396,40 @@ async def analyze_attribution(
                 }
             )
         
-        # Prepare model parameters
-        model_kwargs = {}
-        if half_life_days is not None:
-            model_kwargs['half_life_days'] = half_life_days
-        if first_touch_weight is not None:
-            model_kwargs['first_touch_weight'] = first_touch_weight
-        if last_touch_weight is not None:
-            model_kwargs['last_touch_weight'] = last_touch_weight
-        
         # Perform attribution analysis
         attribution_service = AttributionService()
         result = await attribution_service.analyze_attribution(
-            df, attribution_model_type, **model_kwargs
+            df, attribution_model_type, **model_params
+        )
+        
+        # Log analysis completion
+        processing_time = time.time() - start_time
+        security_logger.log_attribution_analysis(
+            current_user.get("user_id", "unknown"),
+            model_type,
+            len(file_content),
+            processing_time,
+            True
+        )
+        
+        # Log business metrics
+        business_logger.log_api_usage(
+            current_user.get("user_id", "unknown"),
+            "/attribution/analyze",
+            model_type
+        )
+        
+        # Log performance metrics
+        performance_logger.log_attribution_processing_metrics(
+            model_type,
+            len(df),
+            processing_time,
+            result.metadata.get("confidence_score", 0.0)
+        )
+        
+        # Cache the result
+        attribution_cache.set_attribution_result(
+            file_hash, model_type, model_params, result.dict()
         )
         
         return result
@@ -363,6 +437,16 @@ async def analyze_attribution(
     except HTTPException:
         raise
     except Exception as e:
+        # Log analysis error
+        processing_time = time.time() - start_time
+        security_logger.log_attribution_analysis(
+            current_user.get("user_id", "unknown"),
+            model_type,
+            len(file_content) if 'file_content' in locals() else 0,
+            processing_time,
+            False
+        )
+        
         raise HTTPException(
             status_code=500,
             detail={

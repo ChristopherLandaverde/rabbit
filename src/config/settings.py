@@ -37,9 +37,19 @@ class Settings(BaseSettings):
     # Security
     api_key_header: str = Field(default="X-API-Key", description="API key header name")
     cors_origins: list[str] = Field(default=["*"], description="CORS allowed origins")
+    enable_api_key_auth: bool = Field(default=True, description="Enable API key authentication")
+    default_rate_limit: int = Field(default=1000, description="Default rate limit per hour")
+    api_key_ttl_seconds: int = Field(default=86400 * 30, description="API key TTL in seconds (30 days)")
+    
+    # Redis Configuration
+    redis_host: str = Field(default="localhost", description="Redis host")
+    redis_port: int = Field(default=6379, description="Redis port")
+    redis_db: int = Field(default=0, description="Redis database number")
+    redis_password: Optional[str] = Field(default=None, description="Redis password")
     
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
+    enable_security_logging: bool = Field(default=True, description="Enable security event logging")
     
     class Config:
         env_file = ".env"
