@@ -98,10 +98,23 @@ def validate_data_quality(df: pd.DataFrame) -> DataQuality:
         except:
             consistency_scores.append(0.0)
     
-    # Check channel consistency (non-empty strings)
+    # Check channel consistency (non-empty strings and consistent casing)
     if 'channel' in df.columns:
         valid_channels = df['channel'].astype(str).str.len().gt(0).sum()
-        consistency_scores.append(valid_channels / total_rows)
+        # Check for casing inconsistency (compare original values to lowercased)
+        original_channels = df['channel'].astype(str)
+        lower_channels = original_channels.str.lower()
+        # If original has more unique values than lowercased, casing is inconsistent
+        original_unique = len(original_channels.unique())
+        lower_unique = len(lower_channels.unique())
+        casing_consistent = original_unique == lower_unique or original_unique == 1
+        
+        if not casing_consistent:
+            consistency_scores.append(0.7)  # Penalize casing inconsistency
+        else:
+            consistency_scores.append(valid_channels / total_rows)
+    else:
+        consistency_scores.append(0.0)
     
     # Check event_type consistency (valid enum values)
     if 'event_type' in df.columns:
@@ -116,9 +129,18 @@ def validate_data_quality(df: pd.DataFrame) -> DataQuality:
             timestamps = pd.to_datetime(df['timestamp'])
             now = pd.Timestamp.now()
             days_old = (now - timestamps).dt.days
-            # Consider data fresh if it's within 30 days
-            fresh_data = (days_old <= 30).sum()
-            freshness = fresh_data / total_rows
+            # Calculate average freshness score (0-1 scale, 0 = very old, 1 = very recent)
+            # Data within 7 days gets score 1, 7-30 days gets 0.5-1, >30 days gets lower score
+            freshness_scores = []
+            for days in days_old:
+                if days <= 7:
+                    score = 1.0
+                elif days <= 30:
+                    score = 1.0 - ((days - 7) / 46)  # Linear decay from 7 to 30 days
+                else:
+                    score = max(0.0, 0.5 - ((days - 30) / 60))  # Further decay after 30 days
+                freshness_scores.append(score)
+            freshness = sum(freshness_scores) / len(freshness_scores) if freshness_scores else 0.0
         except:
             freshness = 0.0
     else:

@@ -39,6 +39,12 @@ class PositionBasedAttributionModel(AttributionModel):
         if num_touchpoints == 1:
             # Single touchpoint gets all credit
             attribution[journey.touchpoints[0].channel] = 1.0
+        elif num_touchpoints == 2:
+            # With 2 touchpoints, first and last split evenly
+            # Each gets first_touch_weight + (middle_touch_weight / 2)
+            credit_per_position = self.first_touch_weight + (self.middle_touch_weight / 2)
+            attribution[journey.touchpoints[0].channel] = credit_per_position
+            attribution[journey.touchpoints[1].channel] = credit_per_position
         else:
             # First touchpoint
             first_channel = journey.touchpoints[0].channel

@@ -1,0 +1,57 @@
+[run]
+source = src
+omit = 
+    */tests/*
+    */test_*
+    */__pycache__/*
+    */venv/*
+    */env/*
+    */.*
+    setup.py
+    conftest.py
+
+[report]
+# Regexes for lines to exclude from consideration
+exclude_lines =
+    # Have to re-enable the standard pragma
+    pragma: no cover
+
+    # Don't complain about missing debug-only code:
+    def __repr__
+    if self\.debug
+
+    # Don't complain if tests don't hit defensive assertion code:
+    raise AssertionError
+    raise NotImplementedError
+
+    # Don't complain if non-runnable code isn't run:
+    if 0:
+    if __name__ == .__main__.:
+
+    # Don't complain about abstract methods, they aren't run:
+    @(abc\.)?abstractmethod|abstractproperty)
+
+    # Don't complain about imports that are only used for type checking
+    if TYPE_CHECKING:
+
+    # Don't complain about test files
+    def test_
+
+# Partial coverage is OK for these files
+partial_branches = True
+
+# Show missing lines
+show_missing = True
+
+# Skip files with no executable statements
+skip_covered = False
+
+# Minimum coverage percentage
+fail_under = 80
+
+[html]
+directory = htmlcov
+title = Multi-Touch Attribution API Coverage Report
+
+[xml]
+output = coverage.xml

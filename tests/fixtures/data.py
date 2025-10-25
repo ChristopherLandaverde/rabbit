@@ -175,3 +175,259 @@ def large_dataset():
         })
     
     return pd.DataFrame(data)
+
+
+@pytest.fixture
+def complex_multi_customer_dataset():
+    """Complex dataset with multiple customers and various journey patterns."""
+    data = []
+    
+    # Customer 1: Long journey with multiple touchpoints
+    customer_1_touchpoints = [
+        {'timestamp': '2024-01-01 09:00:00', 'channel': 'organic', 'event_type': 'view', 'customer_id': 'cust_001', 'session_id': 'sess_001', 'email': 'user1@example.com'},
+        {'timestamp': '2024-01-01 10:30:00', 'channel': 'email', 'event_type': 'click', 'customer_id': 'cust_001', 'session_id': 'sess_002', 'email': 'user1@example.com'},
+        {'timestamp': '2024-01-01 14:00:00', 'channel': 'social', 'event_type': 'view', 'customer_id': 'cust_001', 'session_id': 'sess_003', 'email': 'user1@example.com'},
+        {'timestamp': '2024-01-02 11:00:00', 'channel': 'paid_search', 'event_type': 'click', 'customer_id': 'cust_001', 'session_id': 'sess_004', 'email': 'user1@example.com'},
+        {'timestamp': '2024-01-02 15:30:00', 'channel': 'display', 'event_type': 'view', 'customer_id': 'cust_001', 'session_id': 'sess_005', 'email': 'user1@example.com'},
+        {'timestamp': '2024-01-03 09:15:00', 'channel': 'email', 'event_type': 'conversion', 'customer_id': 'cust_001', 'session_id': 'sess_006', 'email': 'user1@example.com', 'conversion_value': 150.0}
+    ]
+    data.extend(customer_1_touchpoints)
+    
+    # Customer 2: Short journey, first touch conversion
+    customer_2_touchpoints = [
+        {'timestamp': '2024-01-01 16:00:00', 'channel': 'affiliate', 'event_type': 'conversion', 'customer_id': 'cust_002', 'session_id': 'sess_007', 'email': 'user2@example.com', 'conversion_value': 75.0}
+    ]
+    data.extend(customer_2_touchpoints)
+    
+    # Customer 3: Medium journey, last touch conversion
+    customer_3_touchpoints = [
+        {'timestamp': '2024-01-02 08:00:00', 'channel': 'social', 'event_type': 'view', 'customer_id': 'cust_003', 'session_id': 'sess_008', 'email': 'user3@example.com'},
+        {'timestamp': '2024-01-02 12:00:00', 'channel': 'organic', 'event_type': 'click', 'customer_id': 'cust_003', 'session_id': 'sess_009', 'email': 'user3@example.com'},
+        {'timestamp': '2024-01-02 18:00:00', 'channel': 'paid_search', 'event_type': 'conversion', 'customer_id': 'cust_003', 'session_id': 'sess_010', 'email': 'user3@example.com', 'conversion_value': 200.0}
+    ]
+    data.extend(customer_3_touchpoints)
+    
+    # Customer 4: No conversion journey
+    customer_4_touchpoints = [
+        {'timestamp': '2024-01-03 10:00:00', 'channel': 'email', 'event_type': 'view', 'customer_id': 'cust_004', 'session_id': 'sess_011', 'email': 'user4@example.com'},
+        {'timestamp': '2024-01-03 14:00:00', 'channel': 'social', 'event_type': 'click', 'customer_id': 'cust_004', 'session_id': 'sess_012', 'email': 'user4@example.com'}
+    ]
+    data.extend(customer_4_touchpoints)
+    
+    # Customer 5: Multiple conversions
+    customer_5_touchpoints = [
+        {'timestamp': '2024-01-04 09:00:00', 'channel': 'organic', 'event_type': 'click', 'customer_id': 'cust_005', 'session_id': 'sess_013', 'email': 'user5@example.com'},
+        {'timestamp': '2024-01-04 11:00:00', 'channel': 'email', 'event_type': 'conversion', 'customer_id': 'cust_005', 'session_id': 'sess_014', 'email': 'user5@example.com', 'conversion_value': 100.0},
+        {'timestamp': '2024-01-05 10:00:00', 'channel': 'paid_search', 'event_type': 'click', 'customer_id': 'cust_005', 'session_id': 'sess_015', 'email': 'user5@example.com'},
+        {'timestamp': '2024-01-05 15:00:00', 'channel': 'display', 'event_type': 'conversion', 'customer_id': 'cust_005', 'session_id': 'sess_016', 'email': 'user5@example.com', 'conversion_value': 250.0}
+    ]
+    data.extend(customer_5_touchpoints)
+    
+    return pd.DataFrame(data)
+
+
+@pytest.fixture
+def edge_case_dataset():
+    """Dataset with various edge cases for testing."""
+    data = []
+    
+    # Edge case 1: Same timestamp for multiple touchpoints
+    same_timestamp = '2024-01-01 12:00:00'
+    data.extend([
+        {'timestamp': same_timestamp, 'channel': 'email', 'event_type': 'click', 'customer_id': 'cust_edge_001', 'session_id': 'sess_edge_001', 'email': 'edge1@example.com'},
+        {'timestamp': same_timestamp, 'channel': 'social', 'event_type': 'view', 'customer_id': 'cust_edge_001', 'session_id': 'sess_edge_002', 'email': 'edge1@example.com'},
+        {'timestamp': same_timestamp, 'channel': 'paid_search', 'event_type': 'conversion', 'customer_id': 'cust_edge_001', 'session_id': 'sess_edge_003', 'email': 'edge1@example.com', 'conversion_value': 50.0}
+    ])
+    
+    # Edge case 2: Very long customer journey
+    base_time = datetime(2024, 1, 1, 10, 0, 0)
+    for i in range(20):  # 20 touchpoints
+        data.append({
+            'timestamp': base_time + timedelta(hours=i),
+            'channel': f'channel_{i % 5}',
+            'event_type': 'click' if i < 19 else 'conversion',
+            'customer_id': 'cust_edge_002',
+            'session_id': f'sess_edge_{i+4}',
+            'email': 'edge2@example.com',
+            'conversion_value': 100.0 if i == 19 else None
+        })
+    
+    # Edge case 3: Zero conversion value
+    data.append({
+        'timestamp': '2024-01-02 10:00:00',
+        'channel': 'email',
+        'event_type': 'conversion',
+        'customer_id': 'cust_edge_003',
+        'session_id': 'sess_edge_024',
+        'email': 'edge3@example.com',
+        'conversion_value': 0.0
+    })
+    
+    # Edge case 4: Negative conversion value
+    data.append({
+        'timestamp': '2024-01-02 11:00:00',
+        'channel': 'social',
+        'event_type': 'conversion',
+        'customer_id': 'cust_edge_004',
+        'session_id': 'sess_edge_025',
+        'email': 'edge4@example.com',
+        'conversion_value': -25.0
+    })
+    
+    # Edge case 5: Very high conversion value
+    data.append({
+        'timestamp': '2024-01-02 12:00:00',
+        'channel': 'paid_search',
+        'event_type': 'conversion',
+        'customer_id': 'cust_edge_005',
+        'session_id': 'sess_edge_026',
+        'email': 'edge5@example.com',
+        'conversion_value': 999999.99
+    })
+    
+    return pd.DataFrame(data)
+
+
+@pytest.fixture
+def international_dataset():
+    """Dataset with international characters and various formats."""
+    data = []
+    
+    # International customer data
+    international_customers = [
+        {'email': 'josé@café.com', 'name': 'José García'},
+        {'email': 'maria@españa.es', 'name': 'María López'},
+        {'email': 'françois@français.fr', 'name': 'François Dubois'},
+        {'email': 'hans@deutschland.de', 'name': 'Hans Müller'},
+        {'email': 'yuki@日本.jp', 'name': 'Yuki Tanaka'},
+        {'email': 'ahmed@العربية.ae', 'name': 'أحمد محمد'}
+    ]
+    
+    for i, customer in enumerate(international_customers):
+        data.append({
+            'timestamp': f'2024-01-01 10:{i:02d}:00',
+            'channel': f'channel_{i % 3}',
+            'event_type': 'conversion',
+            'customer_id': f'cust_int_{i:03d}',
+            'session_id': f'sess_int_{i:03d}',
+            'email': customer['email'],
+            'conversion_value': 100.0 + i * 10
+        })
+    
+    return pd.DataFrame(data)
+
+
+@pytest.fixture
+def time_series_dataset():
+    """Dataset with time series patterns for testing time decay models."""
+    data = []
+    
+    # Create data over 30 days
+    base_date = datetime(2024, 1, 1)
+    channels = ['email', 'social', 'paid_search', 'organic', 'display']
+    
+    for day in range(30):
+        for hour in range(0, 24, 6):  # Every 6 hours
+            for channel in channels:
+                # Create touchpoints with decreasing frequency over time
+                if (day + hour) % (7 - day // 5) == 0:  # Decreasing frequency
+                    data.append({
+                        'timestamp': base_date + timedelta(days=day, hours=hour),
+                        'channel': channel,
+                        'event_type': 'click' if (day + hour) % 10 != 0 else 'conversion',
+                        'customer_id': f'cust_ts_{day % 10}',
+                        'session_id': f'sess_ts_{day}_{hour}',
+                        'email': f'user{day % 10}@example.com',
+                        'conversion_value': 50.0 + day * 2 if (day + hour) % 10 == 0 else None
+                    })
+    
+    return pd.DataFrame(data)
+
+
+@pytest.fixture
+def attribution_ground_truth():
+    """Ground truth data for attribution model validation."""
+    return {
+        'linear_expected': {
+            'cust_001': {
+                'organic': 1/6, 'email': 2/6, 'social': 1/6, 'paid_search': 1/6, 'display': 1/6
+            },
+            'cust_002': {
+                'affiliate': 1.0
+            },
+            'cust_003': {
+                'social': 1/3, 'organic': 1/3, 'paid_search': 1/3
+            },
+            'cust_005': {
+                'organic': 1/4, 'email': 1/4, 'paid_search': 1/4, 'display': 1/4
+            }
+        },
+        'first_touch_expected': {
+            'cust_001': {'organic': 1.0},
+            'cust_002': {'affiliate': 1.0},
+            'cust_003': {'social': 1.0},
+            'cust_005': {'organic': 1.0}
+        },
+        'last_touch_expected': {
+            'cust_001': {'email': 1.0},
+            'cust_002': {'affiliate': 1.0},
+            'cust_003': {'paid_search': 1.0},
+            'cust_005': {'display': 1.0}
+        },
+        'position_based_expected': {
+            'cust_001': {
+                'organic': 0.4, 'email': 0.4, 'social': 0.2, 'paid_search': 0.0, 'display': 0.0
+            },
+            'cust_002': {'affiliate': 1.0},
+            'cust_003': {
+                'social': 0.4, 'organic': 0.2, 'paid_search': 0.4
+            },
+            'cust_005': {
+                'organic': 0.4, 'email': 0.2, 'paid_search': 0.2, 'display': 0.4
+            }
+        }
+    }
+
+
+@pytest.fixture
+def performance_test_scenarios():
+    """Different scenarios for performance testing."""
+    scenarios = {}
+    
+    # Small dataset (1k rows)
+    small_data = []
+    for i in range(1000):
+        small_data.append({
+            'timestamp': f'2024-01-01 10:{i % 60:02d}:00',
+            'channel': f'channel_{i % 5}',
+            'event_type': 'click' if i % 10 != 0 else 'conversion',
+            'customer_id': f'cust_{i % 100}',
+            'conversion_value': 100.0 if i % 10 == 0 else None
+        })
+    scenarios['small'] = pd.DataFrame(small_data)
+    
+    # Medium dataset (10k rows)
+    medium_data = []
+    for i in range(10000):
+        medium_data.append({
+            'timestamp': f'2024-01-01 10:{i % 60:02d}:00',
+            'channel': f'channel_{i % 10}',
+            'event_type': 'click' if i % 10 != 0 else 'conversion',
+            'customer_id': f'cust_{i % 1000}',
+            'conversion_value': 100.0 if i % 10 == 0 else None
+        })
+    scenarios['medium'] = pd.DataFrame(medium_data)
+    
+    # Large dataset (50k rows)
+    large_data = []
+    for i in range(50000):
+        large_data.append({
+            'timestamp': f'2024-01-01 10:{i % 60:02d}:00',
+            'channel': f'channel_{i % 20}',
+            'event_type': 'click' if i % 10 != 0 else 'conversion',
+            'customer_id': f'cust_{i % 5000}',
+            'conversion_value': 100.0 if i % 10 == 0 else None
+        })
+    scenarios['large'] = pd.DataFrame(large_data)
+    
+    return scenarios

@@ -85,13 +85,31 @@ project-root/
    cd rabbit
    ```
 
-2. **Set up virtual environment (recommended)**
+2. **Quick Installation (One Command)**
+   ```bash
+   ./quick_start.sh
+   ```
+   This will set up the virtual environment, install all dependencies, and verify the installation.
+
+3. **Manual Installation (Step by Step)**
+   
+   **Set up virtual environment**
+   
+   **Option A: Quick Setup (Recommended)**
+   ```bash
+   ./setup_venv.sh
+   source venv/bin/activate
+   ```
+   
+   **Option B: Manual Setup**
    ```bash
    python3 -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
-
-3. **Install dependencies**
+   
+   > **Having permission/sudo issues?** See [VIRTUAL_ENV_SETUP.md](VIRTUAL_ENV_SETUP.md) for detailed troubleshooting.
+   
+   **Install dependencies**
    ```bash
    # For basic functionality
    pip install -r requirements-minimal.txt

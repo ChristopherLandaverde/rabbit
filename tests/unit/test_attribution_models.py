@@ -6,6 +6,7 @@ from src.core.attribution.first_touch import FirstTouchAttributionModel
 from src.core.attribution.last_touch import LastTouchAttributionModel
 from src.core.attribution.time_decay import TimeDecayAttributionModel
 from src.core.attribution.position_based import PositionBasedAttributionModel
+from src.core.attribution.factory import AttributionModelFactory
 from tests.fixtures.app import sample_journey
 
 
@@ -243,3 +244,300 @@ class TestPositionBasedAttributionModel:
         
         attribution = model.calculate_attribution(empty_journey)
         assert attribution == {}
+
+
+@pytest.mark.unit
+@pytest.mark.algorithm
+class TestAttributionModelFactory:
+    """Test attribution model factory."""
+    
+    def test_create_linear_model(self):
+        """Test creating linear attribution model."""
+        model = AttributionModelFactory.create_model("linear")
+        assert isinstance(model, LinearAttributionModel)
+    
+    def test_create_first_touch_model(self):
+        """Test creating first touch attribution model."""
+        model = AttributionModelFactory.create_model("first_touch")
+        assert isinstance(model, FirstTouchAttributionModel)
+    
+    def test_create_last_touch_model(self):
+        """Test creating last touch attribution model."""
+        model = AttributionModelFactory.create_model("last_touch")
+        assert isinstance(model, LastTouchAttributionModel)
+    
+    def test_create_time_decay_model(self):
+        """Test creating time decay attribution model."""
+        model = AttributionModelFactory.create_model("time_decay")
+        assert isinstance(model, TimeDecayAttributionModel)
+    
+    def test_create_position_based_model(self):
+        """Test creating position-based attribution model."""
+        model = AttributionModelFactory.create_model("position_based")
+        assert isinstance(model, PositionBasedAttributionModel)
+    
+    def test_create_model_with_parameters(self):
+        """Test creating model with custom parameters."""
+        model = AttributionModelFactory.create_model(
+            "time_decay", 
+            half_life_days=14.0
+        )
+        assert isinstance(model, TimeDecayAttributionModel)
+        assert model.half_life_days == 14.0
+    
+    def test_create_invalid_model_raises_error(self):
+        """Test that creating invalid model raises error."""
+        with pytest.raises(ValueError, match="Unsupported attribution model type"):
+            AttributionModelFactory.create_model("invalid_model")
+
+
+@pytest.mark.unit
+@pytest.mark.algorithm
+class TestAttributionModelEdgeCases:
+    """Test attribution models with edge cases."""
+    
+    def test_attribution_with_duplicate_channels(self):
+        """Test attribution with multiple touchpoints in same channel."""
+        from src.models.touchpoint import CustomerJourney, Touchpoint
+        from src.models.enums import EventType
+        from datetime import datetime
+        
+        # Journey with multiple email touchpoints
+        touchpoints = [
+            Touchpoint(
+                timestamp=datetime(2024, 1, 1, 10, 0, 0),
+                channel="email",
+                event_type=EventType.CLICK,
+                customer_id="cust_001"
+            ),
+            Touchpoint(
+                timestamp=datetime(2024, 1, 2, 11, 0, 0),
+                channel="email",
+                event_type=EventType.VIEW,
+                customer_id="cust_001"
+            ),
+            Touchpoint(
+                timestamp=datetime(2024, 1, 3, 12, 0, 0),
+                channel="social",
+                event_type=EventType.CONVERSION,
+                customer_id="cust_001",
+                conversion_value=100.0
+            )
+        ]
+        
+        journey = CustomerJourney(
+            touchpoints=touchpoints,
+            total_conversions=1,
+            total_revenue=100.0,
+            journey_id="duplicate_channels"
+        )
+        
+        # Test linear attribution
+        model = LinearAttributionModel()
+        attribution = model.calculate_attribution(journey)
+        
+        # Should have 3 touchpoints total, email gets 2/3, social gets 1/3
+        assert attribution['email'] == pytest.approx(2.0/3.0, abs=1e-10)
+        assert attribution['social'] == pytest.approx(1.0/3.0, abs=1e-10)
+        assert sum(attribution.values()) == pytest.approx(1.0, abs=1e-10)
+    
+    def test_attribution_with_same_timestamp_touchpoints(self):
+        """Test attribution with touchpoints at same timestamp."""
+        from src.models.touchpoint import CustomerJourney, Touchpoint
+        from src.models.enums import EventType
+        from datetime import datetime
+        
+        same_time = datetime(2024, 1, 1, 10, 0, 0)
+        touchpoints = [
+            Touchpoint(
+                timestamp=same_time,
+                channel="email",
+                event_type=EventType.CLICK,
+                customer_id="cust_001"
+            ),
+            Touchpoint(
+                timestamp=same_time,
+                channel="social",
+                event_type=EventType.VIEW,
+                customer_id="cust_001"
+            ),
+            Touchpoint(
+                timestamp=same_time,
+                channel="paid_search",
+                event_type=EventType.CONVERSION,
+                customer_id="cust_001",
+                conversion_value=100.0
+            )
+        ]
+        
+        journey = CustomerJourney(
+            touchpoints=touchpoints,
+            total_conversions=1,
+            total_revenue=100.0,
+            journey_id="same_timestamp"
+        )
+        
+        # Test linear attribution
+        model = LinearAttributionModel()
+        attribution = model.calculate_attribution(journey)
+        
+        # All should get equal credit
+        expected_credit = 1.0 / 3.0
+        assert attribution['email'] == pytest.approx(expected_credit, abs=1e-10)
+        assert attribution['social'] == pytest.approx(expected_credit, abs=1e-10)
+        assert attribution['paid_search'] == pytest.approx(expected_credit, abs=1e-10)
+        assert sum(attribution.values()) == pytest.approx(1.0, abs=1e-10)
+    
+    def test_attribution_with_zero_conversion_value(self):
+        """Test attribution with zero conversion value."""
+        from src.models.touchpoint import CustomerJourney, Touchpoint
+        from src.models.enums import EventType
+        from datetime import datetime
+        
+        touchpoints = [
+            Touchpoint(
+                timestamp=datetime(2024, 1, 1, 10, 0, 0),
+                channel="email",
+                event_type=EventType.CLICK,
+                customer_id="cust_001"
+            ),
+            Touchpoint(
+                timestamp=datetime(2024, 1, 2, 11, 0, 0),
+                channel="social",
+                event_type=EventType.CONVERSION,
+                customer_id="cust_001",
+                conversion_value=0.0  # Zero conversion value
+            )
+        ]
+        
+        journey = CustomerJourney(
+            touchpoints=touchpoints,
+            total_conversions=1,
+            total_revenue=0.0,  # Zero revenue
+            journey_id="zero_conversion"
+        )
+        
+        # Test that attribution still works with zero conversion value
+        model = LinearAttributionModel()
+        attribution = model.calculate_attribution(journey)
+        
+        assert attribution['email'] == pytest.approx(0.5, abs=1e-10)
+        assert attribution['social'] == pytest.approx(0.5, abs=1e-10)
+        assert sum(attribution.values()) == pytest.approx(1.0, abs=1e-10)
+    
+    def test_attribution_with_very_long_journey(self):
+        """Test attribution with very long customer journey."""
+        from src.models.touchpoint import CustomerJourney, Touchpoint
+        from src.models.enums import EventType
+        from datetime import datetime, timedelta
+        
+        # Create journey with 20 touchpoints
+        touchpoints = []
+        base_time = datetime(2024, 1, 1, 10, 0, 0)
+        channels = ['email', 'social', 'paid_search', 'organic', 'display']
+        
+        for i in range(20):
+            touchpoints.append(Touchpoint(
+                timestamp=base_time + timedelta(hours=i),
+                channel=channels[i % len(channels)],
+                event_type=EventType.CLICK if i < 19 else EventType.CONVERSION,
+                customer_id="cust_001",
+                conversion_value=100.0 if i == 19 else None
+            ))
+        
+        journey = CustomerJourney(
+            touchpoints=touchpoints,
+            total_conversions=1,
+            total_revenue=100.0,
+            journey_id="long_journey"
+        )
+        
+        # Test linear attribution with long journey
+        model = LinearAttributionModel()
+        attribution = model.calculate_attribution(journey)
+        
+        # Each channel should get credit proportional to number of touchpoints
+        # email: 4 touchpoints, social: 4, paid_search: 4, organic: 4, display: 4
+        expected_credit = 4.0 / 20.0  # 0.2 each
+        for channel in channels:
+            assert attribution[channel] == pytest.approx(expected_credit, abs=1e-10)
+        
+        assert sum(attribution.values()) == pytest.approx(1.0, abs=1e-10)
+    
+    def test_time_decay_with_very_short_half_life(self):
+        """Test time decay with very short half-life."""
+        from src.models.touchpoint import CustomerJourney, Touchpoint
+        from src.models.enums import EventType
+        from datetime import datetime, timedelta
+        
+        # Journey spanning 30 days
+        touchpoints = [
+            Touchpoint(
+                timestamp=datetime(2024, 1, 1, 10, 0, 0),
+                channel="email",
+                event_type=EventType.CLICK,
+                customer_id="cust_001"
+            ),
+            Touchpoint(
+                timestamp=datetime(2024, 1, 31, 10, 0, 0),  # 30 days later
+                channel="social",
+                event_type=EventType.CONVERSION,
+                customer_id="cust_001",
+                conversion_value=100.0
+            )
+        ]
+        
+        journey = CustomerJourney(
+            touchpoints=touchpoints,
+            total_conversions=1,
+            total_revenue=100.0,
+            journey_id="long_time_span"
+        )
+        
+        # Very short half-life (1 hour)
+        model = TimeDecayAttributionModel(half_life_days=1.0/24.0)  # 1 hour
+        attribution = model.calculate_attribution(journey)
+        
+        # Social (last touchpoint) should get almost all credit
+        assert attribution['social'] > 0.99
+        assert attribution['email'] < 0.01
+        assert sum(attribution.values()) == pytest.approx(1.0, abs=1e-10)
+    
+    def test_position_based_with_two_touchpoints(self):
+        """Test position-based attribution with exactly two touchpoints."""
+        from src.models.touchpoint import CustomerJourney, Touchpoint
+        from src.models.enums import EventType
+        from datetime import datetime
+        
+        touchpoints = [
+            Touchpoint(
+                timestamp=datetime(2024, 1, 1, 10, 0, 0),
+                channel="email",
+                event_type=EventType.CLICK,
+                customer_id="cust_001"
+            ),
+            Touchpoint(
+                timestamp=datetime(2024, 1, 2, 11, 0, 0),
+                channel="social",
+                event_type=EventType.CONVERSION,
+                customer_id="cust_001",
+                conversion_value=100.0
+            )
+        ]
+        
+        journey = CustomerJourney(
+            touchpoints=touchpoints,
+            total_conversions=1,
+            total_revenue=100.0,
+            journey_id="two_touchpoints"
+        )
+        
+        model = PositionBasedAttributionModel()
+        attribution = model.calculate_attribution(journey)
+        
+        # With 2 touchpoints, first and last should get 40% each, middle gets 20%
+        # But since there's no middle, first and last should split the middle's 20%
+        # So: first gets 40% + 10% = 50%, last gets 40% + 10% = 50%
+        assert attribution['email'] == pytest.approx(0.5, abs=1e-10)
+        assert attribution['social'] == pytest.approx(0.5, abs=1e-10)
+        assert sum(attribution.values()) == pytest.approx(1.0, abs=1e-10)
