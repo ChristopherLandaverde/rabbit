@@ -388,6 +388,9 @@ async def _parse_uploaded_file(file_content: bytes, filename: str) -> pd.DataFra
         else:
             raise ValueError(f"Unsupported file format: {file_extension}")
         
+        # Normalize column names to lowercase
+        df.columns = df.columns.str.lower()
+        
         # Ensure timestamp column is properly parsed
         if 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'])

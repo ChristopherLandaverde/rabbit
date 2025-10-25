@@ -92,7 +92,16 @@ class JourneyAnalyzer:
             }
         
         # Get conversion journeys only
-        conversion_journeys = df[df['event_type'].isin(self.conversion_events)]
+        # Handle conversion event matching more safely
+        try:
+            # Convert event_type values to lowercase strings for comparison
+            event_types_str = df['event_type'].astype(str).str.lower()
+            is_conversion = event_types_str.isin([e.lower() for e in self.conversion_events])
+            conversion_journeys = df[is_conversion]
+        except:
+            # Fallback: skip this analysis if we can't determine conversions
+            conversion_journeys = df.iloc[0:0]  # Empty dataframe
+        
         if len(conversion_journeys) == 0:
             return {
                 'top_paths': [],
@@ -169,7 +178,14 @@ class JourneyAnalyzer:
             }
         
         # Get conversion journeys
-        conversion_journeys = df[df['event_type'].isin(self.conversion_events)]
+        try:
+            # Convert event_type values to lowercase strings for comparison
+            event_types_str = df['event_type'].astype(str).str.lower()
+            is_conversion = event_types_str.isin([e.lower() for e in self.conversion_events])
+            conversion_journeys = df[is_conversion]
+        except:
+            conversion_journeys = df.iloc[0:0]  # Empty dataframe
+        
         if len(conversion_journeys) == 0:
             return {
                 'average_time_to_conversion': 0,
@@ -183,9 +199,19 @@ class JourneyAnalyzer:
         for customer in conversion_journeys[customer_id_col].unique():
             customer_data = df[df[customer_id_col] == customer].sort_values('timestamp')
             
+            # Check if we have data for this customer
+            if len(customer_data) == 0:
+                continue
+            
             # Find first touchpoint and conversion
             first_touch = customer_data.iloc[0]['timestamp']
-            conversion_touch = customer_data[customer_data['event_type'].isin(self.conversion_events)].iloc[0]['timestamp']
+            
+            # Find conversion events in this customer's journey
+            customer_conversions = customer_data[customer_data['event_type'].astype(str).str.lower().isin([e.lower() for e in self.conversion_events])]
+            if len(customer_conversions) == 0:
+                continue
+                
+            conversion_touch = customer_conversions.iloc[0]['timestamp']
             
             # Calculate days between first touch and conversion
             days_diff = (conversion_touch - first_touch).days

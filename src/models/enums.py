@@ -27,3 +27,4 @@ class EventType(str, Enum):
     CONVERSION = "conversion"
     PURCHASE = "purchase"
     SIGNUP = "signup"
+    IMPRESSION = "impression"

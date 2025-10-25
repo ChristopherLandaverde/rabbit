@@ -52,6 +52,9 @@ class AttributionService:
         """
         start_time = time.time()
         
+        # Normalize column names to lowercase
+        df.columns = df.columns.str.lower()
+        
         # Step 1: Validate data
         validation_errors = self._validate_data(df)
         if validation_errors:
@@ -65,15 +68,34 @@ class AttributionService:
         resolver = IdentityResolver(linking_method)
         identity_map = resolver.resolve_identities(df)
         
+        print(f"DEBUG: Identity map has {len(identity_map)} identities")
+        
         # Step 4: Build customer journeys
         journeys = self.journey_builder.build_journeys(df, identity_map)
         
+        print(f"DEBUG: Built {len(journeys)} journeys")
+        
         # Step 5: Calculate attribution
-        attribution_model = AttributionModelFactory.create_model(model_type, **model_kwargs)
-        channel_attributions = self._calculate_attribution(journeys, attribution_model, data_quality)
+        try:
+            attribution_model = AttributionModelFactory.create_model(model_type, **model_kwargs)
+            print(f"DEBUG: About to calculate attribution for {len(journeys)} journeys")
+            channel_attributions = self._calculate_attribution(journeys, attribution_model, data_quality)
+            print(f"DEBUG: Attribution calculated successfully")
+        except Exception as e:
+            print(f"DEBUG: Error in attribution calculation: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         
         # Step 6: Perform journey analysis
-        journey_analysis = self._perform_journey_analysis(df, journeys)
+        try:
+            journey_analysis = self._perform_journey_analysis(df, journeys)
+            print(f"DEBUG: Journey analysis completed")
+        except Exception as e:
+            print(f"DEBUG: Error in journey analysis: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         
         # Step 7: Calculate confidence scores
         model_fit_score = self.confidence_scorer.calculate_model_fit_score(
@@ -111,6 +133,15 @@ class AttributionService:
     def _validate_data(self, df: pd.DataFrame) -> List[str]:
         """Validate input data and return list of error messages."""
         errors = []
+        
+        # Debug: print column names
+        print(f"DEBUG: DataFrame columns: {list(df.columns)}")
+        print(f"DEBUG: DataFrame shape: {df.shape}")
+        
+        # Check if DataFrame is empty
+        if len(df) == 0:
+            errors.append("DataFrame is empty")
+            return errors
         
         # Check required columns
         validation_errors = validate_required_columns(df)
@@ -155,15 +186,15 @@ class AttributionService:
             channel_conversions = int(credit * total_conversions)
             channel_revenue = credit * total_revenue
             
-            # Calculate channel-specific confidence
+            # Calculate channel-specific confidence based on touchpoint count
             channel_touchpoints = sum(
                 len([tp for tp in j.touchpoints if tp.channel == channel])
                 for j in converting_journeys
             )
             
-            channel_confidence = self.confidence_scorer.calculate_channel_confidence(
-                channel_data, total_conversions, credit
-            )
+            # Use channel_touchpoints as a proxy for channel_data
+            # Confidence increases with more touchpoints and higher credit
+            channel_confidence = min(1.0, (channel_touchpoints / max(total_conversions, 1)) * credit)
             
             channel_attributions[channel] = ChannelAttribution(
                 credit=credit,

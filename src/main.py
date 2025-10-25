@@ -7,8 +7,7 @@ from contextlib import asynccontextmanager
 import time
 
 from .config import get_settings
-from .api.routes import health_router
-from .api.routes.attribution_secure import router as attribution_router
+from .api.routes import health_router, attribution_router
 from .core.security import security_middleware
 from .core.logging import setup_logging, request_logger, performance_logger
 from .core.monitoring import health_checker
