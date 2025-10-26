@@ -72,6 +72,21 @@ services:
       - attribution-network
     restart: unless-stopped
 
+  # Frontend Application
+  attribution-frontend:
+    build: ./frontend
+    container_name: attribution-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - NODE_ENV=production
+    depends_on:
+      - attribution-api
+    networks:
+      - attribution-network
+    restart: unless-stopped
+
   # Nginx Load Balancer (optional)
   nginx:
     image: nginx:alpine
@@ -84,6 +99,7 @@ services:
       - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - attribution-api
+      - attribution-frontend
     networks:
       - attribution-network
     restart: unless-stopped

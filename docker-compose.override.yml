@@ -1,0 +1,29 @@
+# Docker Compose Override for Development
+# This file extends docker-compose.yml for development-specific configurations
+
+version: '3.8'
+
+services:
+  # Override frontend for development with hot reload
+  attribution-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"  # Vite dev server port
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # Prevent overwriting node_modules
+    command: npm run dev -- --host 0.0.0.0
+    stdin_open: true
+    tty: true
+
+  # Override API for development with file watching
+  attribution-api:
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload

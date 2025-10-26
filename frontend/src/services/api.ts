@@ -1,7 +1,18 @@
 import axios from 'axios';
 import type { AttributionResponse, ValidationResponse, HealthResponse, AnalysisConfig } from '../types/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// API URL configuration for different environments
+const getApiBaseUrl = () => {
+  // In production Docker environment
+  if (import.meta.env.PROD && window.location.hostname !== 'localhost') {
+    return window.location.origin.replace(':3000', ':8000');
+  }
+  
+  // Development or localhost
+  return import.meta.env.VITE_API_URL || 'http://localhost:8000';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,

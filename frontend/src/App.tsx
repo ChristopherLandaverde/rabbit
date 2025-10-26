@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Container,
   Box,
@@ -11,6 +11,8 @@ import {
   CircularProgress,
   Alert,
   Divider,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
 import {
   ThemeProvider,
@@ -18,10 +20,15 @@ import {
 } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import SendIcon from '@mui/icons-material/Send';
+import SettingsIcon from '@mui/icons-material/Settings';
+import HistoryIcon from '@mui/icons-material/History';
 import FileUpload from './components/FileUpload';
 import ModelSelector from './components/ModelSelector';
 import AttributionTable from './components/AttributionTable';
 import AttributionChart from './components/AttributionChart';
+import StateRecovery from './components/StateRecovery';
+import Settings from './components/Settings';
+import { useAppState } from './hooks/useAppState';
 import { attributionApi } from './services/api';
 import type { AttributionModel, AttributionResponse } from './types/api';
 
@@ -29,9 +36,59 @@ const theme = createTheme({
   palette: {
     primary: {
       main: '#1976d2',
+      light: '#42a5f5',
+      dark: '#1565c0',
     },
     secondary: {
       main: '#dc004e',
+      light: '#ff5983',
+      dark: '#9a0036',
+    },
+    background: {
+      default: '#F9FAFB',
+      paper: '#ffffff',
+    },
+  },
+  typography: {
+    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    h1: {
+      fontWeight: 700,
+    },
+    h2: {
+      fontWeight: 600,
+    },
+    h3: {
+      fontWeight: 600,
+    },
+    h4: {
+      fontWeight: 600,
+    },
+    h5: {
+      fontWeight: 500,
+    },
+    h6: {
+      fontWeight: 500,
+    },
+  },
+  shape: {
+    borderRadius: 12,
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+          fontWeight: 500,
+          borderRadius: 8,
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          backgroundImage: 'none',
+        },
+      },
     },
   },
 });
@@ -39,12 +96,33 @@ const theme = createTheme({
 const steps = ['Upload File', 'Configure Analysis', 'View Results'];
 
 function App() {
-  const [activeStep, setActiveStep] = useState(0);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedModel, setSelectedModel] = useState<AttributionModel>('linear');
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<AttributionResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Use the new state management hook
+  const {
+    activeStep,
+    selectedFile,
+    selectedModel,
+    results,
+    error,
+    loading,
+    analysisHistory,
+    preferences,
+    setActiveStep,
+    setSelectedFile,
+    setSelectedModel,
+    setResults,
+    setError,
+    setLoading,
+    saveAnalysisToHistory,
+    loadFromHistory,
+    resetState,
+    hasRecoverableState,
+    getRecoveryOptions,
+    updatePreferences,
+  } = useAppState();
+
+  // UI state for dialogs
+  const [showStateRecovery, setShowStateRecovery] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
@@ -66,6 +144,11 @@ function App() {
       });
       setResults(response);
       setActiveStep(2);
+      
+      // Save to history if auto-save is enabled
+      if (preferences.autoSave) {
+        saveAnalysisToHistory(selectedFile, selectedModel, response);
+      }
     } catch (err: any) {
       // Handle different error formats
       let errorMessage = 'Failed to analyze attribution';
@@ -92,34 +175,117 @@ function App() {
   };
 
   const handleReset = () => {
-    setSelectedFile(null);
-    setSelectedModel('linear');
-    setResults(null);
-    setError(null);
-    setActiveStep(0);
+    resetState();
+  };
+
+  // Check for recoverable state on app load
+  useEffect(() => {
+    if (hasRecoverableState() && !results && !selectedFile) {
+      setShowStateRecovery(true);
+    }
+  }, [hasRecoverableState, results, selectedFile]);
+
+  // Recovery handlers
+  const handleRecoverSession = () => {
+    setShowStateRecovery(false);
+    // Session recovery is handled automatically by the state manager
+  };
+
+  const handleRecoverResults = () => {
+    setShowStateRecovery(false);
+    setActiveStep(2);
+  };
+
+  const handleLoadFromHistory = (historyItem: any) => {
+    loadFromHistory(historyItem);
+    setShowStateRecovery(false);
+  };
+
+  const handleClearAll = () => {
+    resetState();
+    setShowStateRecovery(false);
+  };
+
+  const handleResetSettings = () => {
+    updatePreferences({
+      defaultModel: 'linear',
+      autoSave: true,
+      showAdvancedOptions: false,
+      theme: 'light',
+    });
   };
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box sx={{ textAlign: 'center', mb: 4 }}>
-          <Typography variant="h3" component="h1" gutterBottom fontWeight="bold">
-            Multi-Touch Attribution
-          </Typography>
-          <Typography variant="h6" color="text.secondary">
-            Analyze marketing touchpoint data and apply attribution models
-          </Typography>
-        </Box>
+      <div className="app-layout">
+        {/* Fixed Sidebar */}
+        <div className="sidebar">
+          <Box sx={{ p: 3, textAlign: 'center' }}>
+            <Typography 
+              variant="h4" 
+              component="h1" 
+              fontWeight="bold"
+              sx={{ 
+                background: 'linear-gradient(45deg, #1976d2, #dc004e)',
+                backgroundClip: 'text',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                mb: 2
+              }}
+            >
+              Rabbit
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              Attribution Analysis
+            </Typography>
+            
+            {/* Action Buttons */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Tooltip title="View Analysis History" arrow>
+                <IconButton 
+                  onClick={() => setShowStateRecovery(true)}
+                  color="primary"
+                  sx={{ mb: 1 }}
+                >
+                  <HistoryIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Settings & Preferences" arrow>
+                <IconButton 
+                  onClick={() => setShowSettings(true)}
+                  color="primary"
+                >
+                  <SettingsIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          </Box>
+        </div>
 
-        <Paper sx={{ p: 4, mb: 4 }}>
-          <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-            {steps.map((label) => (
-              <Step key={label}>
-                <StepLabel>{label}</StepLabel>
-              </Step>
-            ))}
-          </Stepper>
+        {/* Main Content Area */}
+        <div className="main-content">
+          <Container maxWidth="lg" sx={{ py: 4 }}>
+            <div className="content-card">
+              <Stepper 
+                activeStep={activeStep} 
+                sx={{ 
+                  mb: 6,
+                  '& .MuiStepLabel-root': {
+                    '& .MuiStepLabel-label': {
+                      fontSize: '0.9rem',
+                      fontWeight: 500
+                    }
+                  }
+                }}
+              >
+                {steps.map((label) => (
+                  <Step key={label}>
+                    <StepLabel>{label}</StepLabel>
+                  </Step>
+                ))}
+              </Stepper>
 
           {error && (
             <Alert severity="error" sx={{ mb: 3 }}>
@@ -128,20 +294,24 @@ function App() {
           )}
 
           {activeStep === 0 && (
-            <Box>
-              <Typography variant="h5" gutterBottom>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="h4" gutterBottom fontWeight="600" color="primary">
                 Step 1: Upload Your Data
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 500, mx: 'auto' }}>
                 Upload a CSV, JSON, or Parquet file with your marketing touchpoint data
               </Typography>
-              <FileUpload onFileSelect={handleFileSelect} disabled={loading} />
+              <Box sx={{ maxWidth: 600, mx: 'auto' }}>
+                <FileUpload onFileSelect={handleFileSelect} disabled={loading} />
+              </Box>
               {selectedFile && (
-                <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
+                <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
                   <Button
                     variant="contained"
+                    size="large"
                     onClick={() => setActiveStep(1)}
                     disabled={!selectedFile}
+                    sx={{ px: 4, py: 1.5 }}
                   >
                     Continue
                   </Button>
@@ -151,25 +321,36 @@ function App() {
           )}
 
           {activeStep === 1 && (
-            <Box>
-              <Typography variant="h5" gutterBottom>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="h4" gutterBottom fontWeight="600" color="primary">
                 Step 2: Configure Analysis
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 500, mx: 'auto' }}>
                 Select an attribution model to apply to your data
               </Typography>
-              <ModelSelector
-                value={selectedModel}
-                onChange={setSelectedModel}
-                disabled={loading}
-              />
-              <Box sx={{ mt: 4, display: 'flex', justifyContent: 'space-between' }}>
-                <Button onClick={() => setActiveStep(0)}>Back</Button>
+              <Box sx={{ maxWidth: 500, mx: 'auto', mb: 4 }}>
+                <ModelSelector
+                  value={selectedModel}
+                  onChange={setSelectedModel}
+                  disabled={loading}
+                />
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 4 }}>
+                <Button 
+                  variant="outlined" 
+                  onClick={() => setActiveStep(0)}
+                  size="large"
+                  sx={{ px: 4, py: 1.5 }}
+                >
+                  Back
+                </Button>
                 <Button
                   variant="contained"
+                  size="large"
                   onClick={handleAnalyze}
                   disabled={loading}
                   endIcon={loading ? <CircularProgress size={20} /> : <SendIcon />}
+                  sx={{ px: 4, py: 1.5 }}
                 >
                   {loading ? 'Analyzing...' : 'Run Analysis'}
                 </Button>
@@ -179,37 +360,71 @@ function App() {
 
           {activeStep === 2 && results && (
             <Box>
-              <Typography variant="h5" gutterBottom>
-                Step 3: Results
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Your attribution analysis results
-              </Typography>
+              <Box sx={{ textAlign: 'center', mb: 4 }}>
+                <Typography variant="h4" gutterBottom fontWeight="600" color="primary">
+                  Step 3: Results
+                </Typography>
+                <Typography variant="body1" color="text.secondary">
+                  Your attribution analysis results
+                </Typography>
+              </Box>
 
               <Divider sx={{ my: 4 }} />
 
+              {/* Results Section */}
+              {/* KPI Score Cards */}
               <Box sx={{ mb: 4 }}>
-                <Typography variant="h6">Results Summary</Typography>
-                <pre>{JSON.stringify(results.results, null, 2)}</pre>
+                <AttributionTable results={results.results} showKPIsOnly={true} />
               </Box>
 
-              {/* <Box sx={{ mb: 4 }}>
+
+              {/* Pie Chart */}
+              <Box sx={{ mb: 4 }}>
                 <AttributionChart results={results.results} />
-              </Box> */}
-
-              <Box sx={{ mb: 4 }}>
-                <AttributionTable results={results.results} />
               </Box>
 
-              <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 4 }}>
-                <Button variant="outlined" onClick={handleReset}>
+              {/* Channel Attribution Table */}
+              <Box sx={{ mb: 4 }}>
+                <AttributionTable results={results.results} showTableOnly={true} />
+              </Box>
+
+              <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 6 }}>
+                <Button 
+                  variant="outlined" 
+                  onClick={handleReset}
+                  size="large"
+                  sx={{ px: 4, py: 1.5 }}
+                >
                   Analyze Another File
                 </Button>
               </Box>
             </Box>
           )}
-        </Paper>
-      </Container>
+            </div>
+          </Container>
+        </div>
+      </div>
+
+      {/* State Recovery Dialog */}
+      <StateRecovery
+        open={showStateRecovery}
+        onClose={() => setShowStateRecovery(false)}
+        onRecoverSession={handleRecoverSession}
+        onRecoverResults={handleRecoverResults}
+        onLoadFromHistory={handleLoadFromHistory}
+        onClearAll={handleClearAll}
+        recoveryOptions={getRecoveryOptions()}
+        analysisHistory={analysisHistory}
+      />
+
+      {/* Settings Dialog */}
+      <Settings
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        preferences={preferences}
+        onSavePreferences={updatePreferences}
+        onResetSettings={handleResetSettings}
+      />
     </ThemeProvider>
   );
 }

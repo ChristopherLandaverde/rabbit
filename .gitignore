@@ -154,10 +154,11 @@ Thumbs.db
 !test_data.csv
 # JSON files except config files
 *.json
+!package.json
 !**/package.json
+!**/package-lock.json
 !**/tsconfig*.json
 !**/.eslintrc.json
-!**/tsconfig.json
 data/
 logs/
 temp/
