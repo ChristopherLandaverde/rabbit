@@ -38,7 +38,7 @@ def create_app() -> FastAPI:
     
     # Add security middleware
     if settings.enable_api_key_auth:
-        app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.cors_origins)
     
     # Add CORS middleware
     app.add_middleware(

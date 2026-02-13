@@ -249,7 +249,7 @@ docker run -it attribution-api:latest /bin/bash
 
 ```bash
 # Test with API key
-curl -H "X-API-Key: dev-api-key" http://localhost:8000/health
+curl -H "X-API-Key: your-api-key-here" http://localhost:8000/health
 
 # Test without API key (should fail)
 curl http://localhost:8000/health
@@ -260,7 +260,7 @@ curl http://localhost:8000/health
 ```bash
 # Test rate limiting
 for i in {1..10}; do
-  curl -H "X-API-Key: dev-api-key" http://localhost:8000/attribution/methods
+  curl -H "X-API-Key: your-api-key-here" http://localhost:8000/attribution/methods
 done
 ```
 

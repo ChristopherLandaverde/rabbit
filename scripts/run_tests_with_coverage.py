@@ -18,8 +18,10 @@ def run_command(command, description):
     print(f"Running: {description}")
     print(f"Command: {command}")
     print(f"{'='*60}")
-    
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+
+    if isinstance(command, str):
+        command = command.split()
+    result = subprocess.run(command, capture_output=True, text=True)
     
     if result.returncode != 0:
         print(f"❌ {description} failed!")

@@ -108,25 +108,14 @@ class APIKeyManager:
             
             return key_metadata
         else:
-            # Fallback validation for development
-            if api_key == "dev-api-key":
-                return {
-                    "user_id": "dev_user",
-                    "permissions": ["read", "write"],
-                    "created_at": datetime.utcnow().isoformat(),
-                    "last_used": datetime.utcnow().isoformat(),
-                    "is_active": True,
-                    "rate_limit": 1000
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "error": "auth_service_unavailable",
+                    "message": "Authentication service is unavailable",
+                    "timestamp": datetime.utcnow().isoformat()
                 }
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail={
-                        "error": "invalid_api_key",
-                        "message": "Invalid API key",
-                        "timestamp": datetime.utcnow().isoformat()
-                    }
-                )
+            )
     
     def check_rate_limit(self, api_key: str, endpoint: str) -> bool:
         """Check if request is within rate limits."""

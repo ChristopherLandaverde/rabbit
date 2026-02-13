@@ -1,9 +1,12 @@
 """Main attribution service that orchestrates the attribution process."""
 
+import logging
 import time
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from ..models.attribution import (
     AttributionResponse,
@@ -68,33 +71,29 @@ class AttributionService:
         resolver = IdentityResolver(linking_method)
         identity_map = resolver.resolve_identities(df)
         
-        print(f"DEBUG: Identity map has {len(identity_map)} identities")
+        logger.debug("Identity map has %d identities", len(identity_map))
         
         # Step 4: Build customer journeys
         journeys = self.journey_builder.build_journeys(df, identity_map)
         
-        print(f"DEBUG: Built {len(journeys)} journeys")
+        logger.debug("Built %d journeys", len(journeys))
         
         # Step 5: Calculate attribution
         try:
             attribution_model = AttributionModelFactory.create_model(model_type, **model_kwargs)
-            print(f"DEBUG: About to calculate attribution for {len(journeys)} journeys")
+            logger.debug("About to calculate attribution for %d journeys", len(journeys))
             channel_attributions = self._calculate_attribution(journeys, attribution_model, data_quality)
-            print(f"DEBUG: Attribution calculated successfully")
+            logger.debug("Attribution calculated successfully")
         except Exception as e:
-            print(f"DEBUG: Error in attribution calculation: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception("Error in attribution calculation")
             raise
         
         # Step 6: Perform journey analysis
         try:
             journey_analysis = self._perform_journey_analysis(df, journeys)
-            print(f"DEBUG: Journey analysis completed")
+            logger.debug("Journey analysis completed")
         except Exception as e:
-            print(f"DEBUG: Error in journey analysis: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception("Error in journey analysis")
             raise
         
         # Step 7: Calculate confidence scores
@@ -134,9 +133,8 @@ class AttributionService:
         """Validate input data and return list of error messages."""
         errors = []
         
-        # Debug: print column names
-        print(f"DEBUG: DataFrame columns: {list(df.columns)}")
-        print(f"DEBUG: DataFrame shape: {df.shape}")
+        logger.debug("DataFrame columns: %s", list(df.columns))
+        logger.debug("DataFrame shape: %s", df.shape)
         
         # Check if DataFrame is empty
         if len(df) == 0:

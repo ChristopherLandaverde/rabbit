@@ -66,7 +66,7 @@ Example with curl:
 bash
 
 ```bash
-curl -H "X-API-Key: abc123xyz789" \
+curl -H "X-API-Key: your-api-key-here" \
   -X GET https://api.attribution.example.com/v1/attribution/methods
 ```
 

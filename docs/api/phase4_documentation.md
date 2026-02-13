@@ -42,10 +42,10 @@ X-API-Key: your-api-key-here
 
 ### Development Mode
 
-For development, you can use the default API key:
+Generate an API key through the API key management system and pass it via header:
 
 ```bash
-X-API-Key: dev-api-key
+X-API-Key: your-api-key-here
 ```
 
 ### Production API Keys

@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     
     # Security
     api_key_header: str = Field(default="X-API-Key", description="API key header name")
-    cors_origins: list[str] = Field(default=["*"], description="CORS allowed origins")
+    cors_origins: list[str] = Field(default=["http://localhost:3000", "http://localhost:5173"], description="CORS allowed origins")
     enable_api_key_auth: bool = Field(default=True, description="Enable API key authentication")
     default_rate_limit: int = Field(default=1000, description="Default rate limit per hour")
     api_key_ttl_seconds: int = Field(default=86400 * 30, description="API key TTL in seconds (30 days)")

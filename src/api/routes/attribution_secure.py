@@ -161,7 +161,7 @@ async def validate_data(
             status_code=500,
             detail={
                 "error": "validation_error",
-                "message": f"Error validating data: {str(e)}",
+                "message": "An internal error occurred while validating data",
                 "details": {"error_type": type(e).__name__},
                 "timestamp": datetime.utcnow().isoformat()
             }
@@ -322,7 +322,7 @@ async def get_available_methods(current_user: dict = Depends(get_current_user)):
             status_code=500,
             detail={
                 "error": "methods_retrieval_error",
-                "message": f"Error retrieving available methods: {str(e)}",
+                "message": "An internal error occurred while retrieving methods",
                 "details": {"error_type": type(e).__name__},
                 "timestamp": datetime.utcnow().isoformat()
             }
@@ -451,7 +451,7 @@ async def analyze_attribution(
             status_code=500,
             detail={
                 "error": "processing_error",
-                "message": f"Error processing attribution analysis: {str(e)}",
+                "message": "An internal error occurred while processing attribution analysis",
                 "details": {"error_type": type(e).__name__},
                 "timestamp": datetime.utcnow().isoformat()
             }
@@ -483,7 +483,7 @@ async def _parse_uploaded_file(file_content: bytes, filename: str) -> pd.DataFra
             status_code=422,
             detail={
                 "error": "file_parsing_error",
-                "message": f"Error parsing uploaded file: {str(e)}",
+                "message": "Error parsing uploaded file",
                 "details": {"file_extension": file_extension, "error_type": type(e).__name__},
                 "timestamp": datetime.utcnow().isoformat()
             }

@@ -116,7 +116,10 @@ spec:
           name: http
         env:
         - name: GF_SECURITY_ADMIN_PASSWORD
-          value: "admin"
+          valueFrom:
+            secretKeyRef:
+              name: grafana-credentials
+              key: admin-password
         volumeMounts:
         - name: grafana-storage
           mountPath: /var/lib/grafana

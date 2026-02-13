@@ -54,7 +54,7 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
                 "error": "authentication_failed",
-                "message": f"Authentication failed: {str(e)}",
+                "message": "Authentication failed",
                 "timestamp": "2024-01-01T00:00:00Z"
             }
         )
