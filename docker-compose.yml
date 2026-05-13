@@ -3,7 +3,27 @@
 version: '3.8'
 
 services:
-  # Redis for caching and rate limiting
+  # Postgres for v2 persistence
+  postgres:
+    image: postgres:16-alpine
+    container_name: attribution-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: rabbit
+      POSTGRES_PASSWORD: rabbit_dev
+      POSTGRES_DB: rabbit
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rabbit -d rabbit"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - attribution-network
+
+  # Redis for caching, rate limiting, and idempotency cache
   redis:
     image: redis:7-alpine
     container_name: attribution-redis
@@ -14,9 +34,9 @@ services:
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - attribution-network
 
@@ -36,6 +56,12 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_DB=0
+
+      # v2 Configuration
+      - RABBIT_V2_ENABLED=true
+      - DATABASE_URL=postgresql+asyncpg://rabbit:rabbit_dev@postgres:5432/rabbit
+      - ADMIN_BOOTSTRAP_KEY=admin_dev_change_me
+      - RABBIT_WEBHOOK_SECRET_KEY=dev_webhook_key_32_bytes_padded__
       
       # Logging
       - LOG_LEVEL=INFO
@@ -61,6 +87,8 @@ services:
       - ./logs:/app/logs
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
@@ -106,6 +134,7 @@ services:
 
 volumes:
   redis_data:
+  postgres_data:
 
 networks:
   attribution-network:

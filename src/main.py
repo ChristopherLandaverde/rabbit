@@ -1,5 +1,6 @@
 """Main FastAPI application for the Multi-Touch Attribution API."""
 
+import os
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -11,6 +12,10 @@ from .api.routes import health_router, attribution_router
 from .core.security import security_middleware
 from .core.logging import setup_logging, request_logger, performance_logger
 from .core.monitoring import health_checker
+
+
+def _v2_enabled() -> bool:
+    return os.environ.get("RABBIT_V2_ENABLED", "false").lower() in ("1", "true", "yes")
 
 
 @asynccontextmanager
@@ -29,11 +34,16 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     settings = get_settings()
     
+    # openapi_url=None when v2 is enabled — we publish /v2/openapi.json explicitly
+    # to keep the v2 spec separate from v1 for SDK generation (A6).
+    openapi_url = None if _v2_enabled() else "/openapi.json"
+
     app = FastAPI(
         title=settings.app_name,
         version=settings.version,
         description="Multi-Touch Attribution API for analyzing marketing touchpoint data",
-        lifespan=lifespan
+        lifespan=lifespan,
+        openapi_url=openapi_url,
     )
     
     # Add security middleware
@@ -84,7 +94,18 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(health_router, tags=["Health"])
     app.include_router(attribution_router, prefix="/attribution", tags=["Attribution"])
-    
+
+    # v2 surface — gated behind RABBIT_V2_ENABLED env flag during M0-M5 buildout
+    if _v2_enabled():
+        from .v2 import v2_router
+        from .v2.openapi import build_v2_openapi
+
+        app.include_router(v2_router, prefix="/v2")
+
+        @app.get("/v2/openapi.json", include_in_schema=False)
+        async def v2_openapi():
+            return build_v2_openapi(app)
+
     return app
 
 
