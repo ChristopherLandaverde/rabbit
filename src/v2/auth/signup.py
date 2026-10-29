@@ -39,7 +39,8 @@ async def signup(request: Request, details: SignupDetails | None = None, session
     key = ApiKey(
         id=str(ULID()), key_hash=hash_api_key(plaintext), key_prefix=plaintext[:12],
         name=(details.email if details and details.email else "self-serve test key"),
-        scopes=["datasets:write", "analyses:write"], rate_limit_per_minute=None,
+        scopes=["datasets:write", "datasets:read", "analyses:write", "analyses:read"],
+        rate_limit_per_minute=None,
         is_test=True, created_at=now,
     )
     session.add(key)

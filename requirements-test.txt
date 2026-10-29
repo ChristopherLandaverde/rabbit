@@ -13,4 +13,3 @@ psutil==5.9.6
 factory-boy==3.3.0
 faker==20.1.0
 freezegun==1.2.2
-testcontainers==4.15.0
