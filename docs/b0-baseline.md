@@ -15,27 +15,42 @@ The pinned runtime packages installed successfully on Python 3.12, so no major d
 
 ## Test suite state
 
-The known-failure list contains one exact pytest node ID for each of the 66
-currently failing tests and four `module:` entries for the modules that fail
-during collection. Each entry is grouped under a reason from this baseline.
-`conftest.py` marks matching tests `xfail(strict=True)` and reads collection
-modules into `collect_ignore`. Strict xfails ensure that a known failure which
-starts passing makes CI fail until its line is deleted from the list. New test
-failures and regressions in tests not listed there remain regular failures.
+`tests/known_failures.txt` contains exact pytest node IDs for known failures and
+four `module:` entries for collection errors. `conftest.py` marks matching
+tests `xfail(strict=True)` and reads collection modules into `collect_ignore`.
+Strict xfails ensure that a known failure which starts passing makes CI fail
+until its line is deleted. New test failures and regressions remain ordinary
+failures.
 
-The CI and local command is:
+`tests/redis_required.txt` separately lists tests that exercise live Redis.
+`conftest.py` probes `REDIS_HOST`, `REDIS_PORT`, and `REDIS_DB` once per session;
+those tests skip with `needs Redis` if the endpoint is unreachable and run
+normally when it responds. CI points these variables and `DATABASE_URL` at its
+Redis 7 and Postgres 16 services. The v2 Redis fixture uses the configured
+service instead of starting a second Testcontainers Redis without a readiness
+check. That startup race caused intermittent connection resets/timeouts in v2;
+locally, v2 uses a reachable service or skips with `needs Redis`.
+
+With Redis and Postgres running, the CI suite commands produced:
 
 ```text
-python -m pytest -q
-300 passed, 22 skipped, 66 xfailed, 155310 warnings in 13.96s
+python -m pytest -q --ignore=tests/v2
+315 passed, 22 skipped, 53 xfailed, 156523 warnings in 12.91s
+
+python -m pytest -q tests/v2
+5 passed, 5 warnings in 0.96s
 ```
 
-After the #27 time-decay fix (two new attribution unit tests, no known failure
-changed state):
+With Redis unavailable, the v1 command produced:
 
 ```text
-302 passed, 22 skipped, 66 xfailed, 155310 warnings in 9.01s
+python -m pytest -q --ignore=tests/v2
+302 passed, 36 skipped, 52 xfailed, 155307 warnings in 5.72s
 ```
+
+Redis-related strict xfails that pass with the service were removed. Any live
+Redis tests that still fail for a separate reason remain strict xfails with
+that cause recorded; other live Redis checks pass with the service.
 
 Baseline collection errors represented in `tests/known_failures.txt`:
 
@@ -45,16 +60,16 @@ Baseline collection errors represented in `tests/known_failures.txt`:
 | `tests/integration/test_phase3_integration.py` | 1 error | A synchronous test contains `await`, causing `SyntaxError: 'await' outside async function`. |
 | `tests/performance/test_phase3_performance.py` | 1 error | Synchronous test functions (including a nested worker) contain `await`, causing the same syntax error. |
 
-The 66 executed failures, now represented as strict xfails, are grouped by file below.
+The remaining strict xfails are grouped by file below.
 
 | Test group | Failed | Observed reason |
 |---|---:|---|
-| `tests/integration/test_phase4_integration.py` | 8 | Redis is not running at `localhost:6379`; cache integration expectations fail and health reports the Redis-backed dependency as unhealthy. |
-| `tests/performance/test_phase4_performance.py` | 12 | Redis-backed cache operations fail without Redis; metrics tests expect 10,000/100,000 records while the collector reports 1,000. |
+| `tests/integration/test_phase4_integration.py` | 2 | One test calls async middleware without awaiting it; another patches the shared `redis.Redis` class, contaminating its CacheManager mock. |
+| `tests/performance/test_phase4_performance.py` | 5 | Metrics tests expect 10,000/100,000 records while the collector reports 1,000; two tests omit `import json`; one expects a one-second system probe to finish within 0.5 seconds. |
 | `tests/unit/test_api_endpoints_phase3.py` | 21 | Requests in the tests receive HTTP 400 where the tests expect success or specific 413/422/500 responses; endpoint validation behavior and fixtures do not match those expectations. |
 | `tests/unit/test_logging.py` | 9 | Logger setup and emitted logging behavior do not match the handlers, authentication event, request-error, and masking behavior asserted by these tests. |
-| `tests/unit/test_monitoring.py` | 1 | The monitoring integration expects a healthy backing dependency, but Redis is unavailable and health is unhealthy. |
-| `tests/unit/test_secure_api.py` | 14 | Secure API tests include cache expectations that miss without Redis, file-parsing error paths that raise `NameError: json is not defined`, and response expectations that do not match current route behavior. |
+| `tests/unit/test_monitoring.py` | 1 | The monitoring workflow assumes process-global counters start at zero, but earlier tests have recorded requests. |
+| `tests/unit/test_secure_api.py` | 14 | Secure API tests retain request/response and cache contract mismatches; file-parsing error paths also raise `NameError: json is not defined`. |
 | `tests/unit/test_security.py` | 1 | The development fallback API key is rejected by the current key-validation behavior. |
 
 This is the observed baseline, not a claim that all failure causes were introduced by B0. When a listed test is fixed, delete its node ID from `tests/known_failures.txt`; when a collection-error module is fixed, delete its `module:` entry. The logging import boot issue was fixed so the fresh-checkout API and remaining tests can load; the test contract failures above are not changed here.

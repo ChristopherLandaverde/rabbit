@@ -81,9 +81,8 @@ def test_postgres_container_migration(postgres_url):
     )
 
 
-def test_redis_container(redis_container):
-    host = redis_container.get_container_host_ip()
-    port = int(redis_container.get_exposed_port(6379))
+def test_redis_service(redis_service):
+    host, port = redis_service
     client = Redis(host=host, port=port)
     try:
         assert client.ping() is True

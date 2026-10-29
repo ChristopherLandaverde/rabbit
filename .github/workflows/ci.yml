@@ -17,6 +17,11 @@ jobs:
           - suite: v2
             test-command: python -m pytest -q tests/v2
     name: pytest (${{ matrix.suite }})
+    env:
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      DATABASE_URL: postgresql+asyncpg://rabbit:rabbit@127.0.0.1:5432/rabbit
     services:
       postgres:
         image: postgres:16-alpine

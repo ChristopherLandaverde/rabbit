@@ -30,9 +30,13 @@ python -m pytest -q
 ```
 
 `tests/known_failures.txt` lists baseline failing pytest node IDs as strict xfails
-and collection-error modules to ignore. A known test that starts passing fails CI
-because the xfail is strict; delete its line from the list when fixing it. New or
-previously passing tests that fail remain ordinary failures.
+and collection-error modules to ignore. `tests/redis_required.txt` lists tests
+that exercise the live Redis service; `conftest.py` probes the configured Redis
+endpoint once per pytest session and skips those tests with `needs Redis` when
+the endpoint cannot be reached. With Redis available, they run normally. A known
+test that starts passing fails CI because the xfail is strict; delete its line
+from the known-failure list when fixing it. New or previously passing tests that
+fail remain ordinary failures.
 
 Start the API from the repository root:
 

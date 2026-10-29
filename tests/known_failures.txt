@@ -1,27 +1,8 @@
 # Known failures from docs/b0-baseline.md. Delete an entry when it is fixed.
 
-# Reason: Redis is not running at localhost:6379; cache integration expectations fail and health reports the Redis-backed dependency as unhealthy.
-tests/integration/test_phase4_integration.py::TestPhase4SecurityIntegration::test_security_flow_integration
-tests/integration/test_phase4_integration.py::TestPhase4CachingIntegration::test_caching_system_integration
-tests/integration/test_phase4_integration.py::TestPhase4CachingIntegration::test_cache_ttl_integration
-tests/integration/test_phase4_integration.py::TestPhase4CachingIntegration::test_cache_statistics_integration
-tests/integration/test_phase4_integration.py::TestPhase4MonitoringIntegration::test_monitoring_system_integration
-tests/integration/test_phase4_integration.py::TestPhase4EndToEndIntegration::test_complete_phase4_workflow
-tests/integration/test_phase4_integration.py::TestPhase4EndToEndIntegration::test_phase4_performance_integration
-tests/integration/test_phase4_integration.py::TestPhase4EndToEndIntegration::test_phase4_scalability_integration
 
-# Reason: Redis-backed cache operations fail without Redis; metrics tests expect 10,000/100,000 records while the collector reports 1,000.
-tests/performance/test_phase4_performance.py::TestPhase4SecurityPerformance::test_api_key_generation_performance
-tests/performance/test_phase4_performance.py::TestPhase4SecurityPerformance::test_api_key_validation_performance
-tests/performance/test_phase4_performance.py::TestPhase4SecurityPerformance::test_rate_limiting_performance
-tests/performance/test_phase4_performance.py::TestPhase4CachingPerformance::test_cache_operations_performance
-tests/performance/test_phase4_performance.py::TestPhase4CachingPerformance::test_attribution_cache_performance
-tests/performance/test_phase4_performance.py::TestPhase4CachingPerformance::test_api_cache_performance
-tests/performance/test_phase4_performance.py::TestPhase4CachingPerformance::test_cache_hit_rate_performance
-tests/performance/test_phase4_performance.py::TestPhase4MonitoringPerformance::test_health_checking_performance
+# Reason: MetricsCollector retains at most 1,000 records, while these tests expect 10,000 or 100,000 records.
 tests/performance/test_phase4_performance.py::TestPhase4MonitoringPerformance::test_metrics_collection_performance
-tests/performance/test_phase4_performance.py::TestPhase4LoadTesting::test_concurrent_cache_operations
-tests/performance/test_phase4_performance.py::TestPhase4ScalabilityLimits::test_cache_capacity_limits
 tests/performance/test_phase4_performance.py::TestPhase4ScalabilityLimits::test_metrics_collection_limits
 
 # Reason: Requests in the tests receive HTTP 400 where the tests expect success or specific 413/422/500 responses; endpoint validation behavior and fixtures do not match those expectations.
@@ -58,10 +39,8 @@ tests/unit/test_logging.py::TestRequestLogger::test_log_request_without_user_inf
 tests/unit/test_logging.py::TestLoggingIntegration::test_setup_logging
 tests/unit/test_logging.py::TestLoggingIntegration::test_logging_api_key_masking
 
-# Reason: The monitoring integration expects a healthy backing dependency, but Redis is unavailable and health is unhealthy.
-tests/unit/test_monitoring.py::TestMonitoringIntegration::test_monitoring_workflow
 
-# Reason: Secure API tests include cache expectations that miss without Redis, file-parsing error paths that raise NameError: json is not defined, and response expectations that do not match current route behavior.
+# Reason: Secure API tests retain request/response and cache contract mismatches; file-parsing error paths also raise NameError: json is not defined.
 tests/unit/test_secure_api.py::TestValidateData::test_validate_data_success
 tests/unit/test_secure_api.py::TestValidateData::test_validate_data_processing_error
 tests/unit/test_secure_api.py::TestGetAvailableMethods::test_get_available_methods_cached
@@ -75,7 +54,6 @@ tests/unit/test_secure_api.py::TestParseUploadedFile::test_parse_parquet_file
 tests/unit/test_secure_api.py::TestParseUploadedFile::test_parse_unsupported_file
 tests/unit/test_secure_api.py::TestParseUploadedFile::test_parse_file_with_timestamp_conversion
 tests/unit/test_secure_api.py::TestParseUploadedFile::test_parse_file_parsing_error
-tests/unit/test_secure_api.py::TestSecureAPIIntegration::test_secure_api_dependencies
 
 # Reason: The development fallback API key is rejected by the current key-validation behavior.
 tests/unit/test_security.py::TestAPIKeyManager::test_validate_api_key_dev_fallback
@@ -89,3 +67,22 @@ module:tests/performance/test_benchmarks.py
 module:tests/integration/test_phase3_integration.py
 # Reason: Synchronous test functions (including a nested worker) contain await, causing SyntaxError: 'await' outside async function.
 module:tests/performance/test_phase3_performance.py
+
+# Reason: The test calls async SecurityMiddleware.validate_request without awaiting its coroutine.
+tests/integration/test_phase4_integration.py::TestPhase4SecurityIntegration::test_security_flow_integration
+
+# Reason: These test bodies reference json.dumps without importing json.
+tests/performance/test_phase4_performance.py::TestPhase4SecurityPerformance::test_api_key_validation_performance
+tests/performance/test_phase4_performance.py::TestPhase4SecurityPerformance::test_rate_limiting_performance
+
+# Reason: HealthChecker.check_system_health calls psutil.cpu_percent(interval=1), exceeding the test's 0.5 second limit.
+tests/performance/test_phase4_performance.py::TestPhase4MonitoringPerformance::test_health_checking_performance
+
+# Reason: The test assumes process-global monitoring counters start at zero, but other tests have already recorded requests.
+tests/unit/test_monitoring.py::TestMonitoringIntegration::test_monitoring_workflow
+
+# Reason: The route functions do not expose __wrapped__; FastAPI dependency metadata is held in their dependency definitions.
+tests/unit/test_secure_api.py::TestSecureAPIIntegration::test_secure_api_dependencies
+
+# Reason: Patching src.core.security.redis.Redis also patches the shared redis module used by CacheManager; its mocked get result contaminates the cache assertion.
+tests/integration/test_phase4_integration.py::TestPhase4EndToEndIntegration::test_complete_phase4_workflow
