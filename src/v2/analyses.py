@@ -169,9 +169,7 @@ def compute_model_result(frame: pd.DataFrame, model: str, parameters: dict[str, 
                 "conversions": value.conversions,
                 "revenue": value.revenue,
             }
-            for channel, value in sorted(
-                channels.items(), key=lambda item: item[1].credit, reverse=True
-            )
+            for channel, value in channels.items()
         },
     }
     return summary, result

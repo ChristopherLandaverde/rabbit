@@ -41,6 +41,16 @@ python -m pytest -q tests/v2
 5 passed, 5 warnings in 0.96s
 ```
 
+After the v2 analyses slice (#16), with Redis 7 and Postgres 16 running:
+
+```text
+python -m pytest -q --ignore=tests/v2
+315 passed, 22 skipped, 53 xfailed, 156524 warnings in 13.09s
+
+python -m pytest -q tests/v2
+48 passed, 48 warnings in 12.55s
+```
+
 With Redis unavailable, the v1 command produced:
 
 ```text

@@ -10,6 +10,9 @@ from src.db.models import Dataset
 
 ROOT = Path(__file__).resolve().parents[2]
 SAMPLE = ROOT / "examples" / "sample_campaigns.csv"
+# The sample dataset is symmetric: every model gives each channel 20%. The
+# regression file test_data.csv separates the models, so both are checked.
+REFERENCE = ROOT / "test_data.csv"
 ALL_SCOPES = ["datasets:write", "datasets:read", "analyses:write", "analyses:read"]
 
 
@@ -64,6 +67,7 @@ def _set_dataset(client, dataset_id, **fields):
     asyncio.run(update())
 
 
+@pytest.mark.parametrize("data_file", [SAMPLE, REFERENCE], ids=["sample", "test_data"])
 @pytest.mark.parametrize(
     "model,options,v1_params",
     [
@@ -78,12 +82,12 @@ def _set_dataset(client, dataset_id, **fields):
         ),
     ],
 )
-def test_end_to_end_sample_dataset_credits_match_v1(
-    client, make_key, storage_dir, model, options, v1_params
+def test_end_to_end_credits_match_v1(
+    client, make_key, storage_dir, model, options, v1_params, data_file
 ):
-    """API key -> upload sample -> validate -> analyze -> result equals v1 output."""
+    """API key -> upload dataset -> validate -> analyze -> result equals v1 output."""
     key = make_key(client, scopes=ALL_SCOPES, mode="test")
-    dataset_id = _upload(client, key)
+    dataset_id = _upload(client, key, content=data_file.read_bytes())
     dataset = client.get(f"/v2/datasets/{dataset_id}", headers=_headers(key)).json()
     assert dataset["status"] == "ready"
 
@@ -106,7 +110,7 @@ def test_end_to_end_sample_dataset_credits_match_v1(
 
     model_result = analysis["results"][model]
     assert model_result["model"] == model
-    expected = _v1_credits(client, SAMPLE.read_bytes(), model, **v1_params)
+    expected = _v1_credits(client, data_file.read_bytes(), model, **v1_params)
     v2_channels = model_result["channels"]
     v1_channels = expected["channel_attributions"]
     assert v1_channels and set(v2_channels) == set(v1_channels)
@@ -117,6 +121,26 @@ def test_end_to_end_sample_dataset_credits_match_v1(
     assert analysis["summary"]["total_conversions"] == expected["total_conversions"]
     assert analysis["summary"]["total_revenue"] == expected["total_revenue"]
     assert sum(c["credit"] for c in v2_channels.values()) == pytest.approx(1.0)
+
+
+def test_linear_on_reference_file_matches_recorded_baseline(client, make_key, storage_dir):
+    """Anchor to docs/b0-baseline.md raw linear credits, normalized to shares."""
+    key = make_key(client, scopes=ALL_SCOPES)
+    dataset_id = _upload(client, key, content=REFERENCE.read_bytes())
+    created = client.post(
+        "/v2/analyses",
+        headers=_headers(key),
+        json={"dataset_id": dataset_id, "models": ["linear"]},
+    ).json()
+    channels = client.get(f"/v2/analyses/{created['id']}", headers=_headers(key)).json()[
+        "results"
+    ]["linear"]["channels"]
+    raw = {"email": 1.1666666666666665, "organic": 0.6666666666666666,
+           "paid_search": 0.5833333333333333, "social": 0.5833333333333333}
+    total = sum(raw.values())
+    assert {c: v["credit"] for c, v in channels.items()} == pytest.approx(
+        {c: v / total for c, v in raw.items()}
+    )
 
 
 def test_result_names_model_parameters_and_states_association_not_causation(
