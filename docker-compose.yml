@@ -1,7 +1,5 @@
 # Multi-Touch Attribution API - Docker Compose Configuration
 
-version: '3.8'
-
 services:
   # Redis for caching and rate limiting
   redis:
@@ -17,6 +15,26 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - attribution-network
+
+  # Rabbit v2 relational store
+  postgres:
+    image: postgres:16-alpine
+    container_name: rabbit-postgres
+    environment:
+      POSTGRES_DB: rabbit
+      POSTGRES_USER: rabbit
+      POSTGRES_PASSWORD: rabbit
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rabbit -d rabbit"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - attribution-network
 
@@ -36,6 +54,10 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_DB=0
+
+      # Rabbit v2 infrastructure
+      - DATABASE_URL=postgresql+asyncpg://rabbit:rabbit@postgres:5432/rabbit
+      - RABBIT_V2_ENABLED=true
       
       # Logging
       - LOG_LEVEL=INFO
@@ -61,6 +83,8 @@ services:
       - ./logs:/app/logs
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
@@ -106,6 +130,7 @@ services:
 
 volumes:
   redis_data:
+  postgres_data:
 
 networks:
   attribution-network:

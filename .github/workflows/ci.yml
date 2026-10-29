@@ -8,6 +8,43 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: v1
+            test-command: python -m pytest -q --ignore=tests/v2
+          - suite: v2
+            test-command: python -m pytest -q tests/v2
+    name: pytest (${{ matrix.suite }})
+    env:
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      DATABASE_URL: postgresql+asyncpg://rabbit:rabbit@127.0.0.1:5432/rabbit
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: rabbit
+          POSTGRES_USER: rabbit
+          POSTGRES_PASSWORD: rabbit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rabbit -d rabbit"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -15,9 +52,9 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt -r requirements-test.txt
       - name: Run pytest
-        run: python -m pytest -q
+        run: ${{ matrix.test-command }}
 
   frontend:
     runs-on: ubuntu-latest

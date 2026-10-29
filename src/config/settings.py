@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     redis_port: int = Field(default=6379, description="Redis port")
     redis_db: int = Field(default=0, description="Redis database number")
     redis_password: Optional[str] = Field(default=None, description="Redis password")
+
+    # Rabbit v2 infrastructure
+    database_url: str = Field(
+        default="postgresql+asyncpg://rabbit:rabbit@localhost:5432/rabbit",
+        description="Async SQLAlchemy database URL",
+    )
+    rabbit_v2_enabled: bool = Field(default=False, description="Enable the v2 API")
     
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")

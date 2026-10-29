@@ -6,12 +6,15 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
 import time
 from urllib.parse import urlsplit
+from redis.asyncio import Redis
 
 from .config import get_settings
 from .api.routes import health_router, attribution_router
 from .core.security import security_middleware
 from .core.logging import setup_logging, request_logger, performance_logger
 from .core.monitoring import health_checker
+from .db.session import engine
+from .v2.router import v2_router
 
 
 @asynccontextmanager
@@ -20,9 +23,18 @@ async def lifespan(app: FastAPI):
     # Startup
     settings = get_settings()
     setup_logging()
+    app.state.db_engine = engine
+    app.state.redis = Redis.from_url(
+        f"redis://{settings.redis_host}:{settings.redis_port}/{settings.redis_db}",
+        password=settings.redis_password,
+        decode_responses=True,
+    )
     print(f"Starting {settings.app_name} v{settings.version}")
-    yield
-    # Shutdown
+    try:
+        yield
+    finally:
+        await app.state.redis.aclose()
+        await engine.dispose()
     print("Shutting down application")
 
 
@@ -34,7 +46,8 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.version,
         description="Multi-Touch Attribution API for analyzing marketing touchpoint data",
-        lifespan=lifespan
+        lifespan=lifespan,
+        openapi_url=None,
     )
     
     # Add security middleware
@@ -90,6 +103,8 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(health_router, tags=["Health"])
     app.include_router(attribution_router, prefix="/attribution", tags=["Attribution"])
+    if settings.rabbit_v2_enabled:
+        app.include_router(v2_router, prefix="/v2")
     
     return app
 
