@@ -1,124 +1,84 @@
-# Rabbit - Multi-Touch Attribution Platform
+# Rabbit
 
-A full-stack platform for analyzing marketing touchpoint data using attribution models. Features a React frontend and FastAPI backend with confidence scoring and business insights.
+Rabbit is a multi-touch marketing attribution API with a React frontend. The API analyzes customer touchpoint data with five attribution models: first touch, last touch, linear, time decay, and position based. Results describe attribution under the selected model; they do not estimate causal impact.
 
-## Quick Start
+## Requirements
 
-### Docker (Recommended)
+- Python 3.12
+- `uv` (recommended) or Python's built-in `venv` and `pip`
+
+## Install
+
+From the repository root, create a virtual environment and install the pinned dependencies:
+
 ```bash
-git clone https://github.com/ChristopherLandaverde/rabbit.git
-cd rabbit
-docker-compose up --build
-```
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-
-### Manual Setup
-```bash
-# Backend
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-python3 run.py
-
-# Frontend (new terminal)
-cd frontend && npm install && npm run dev
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -r requirements.txt
 ```
 
-## Features
+Or use the standard Python tools:
 
-- **5 Attribution Models**: Linear, Time Decay, First Touch, Last Touch, Position-Based
-- **Interactive Frontend**: React dashboard with file upload, model selection, and results visualization
-- **State Persistence**: Auto-save, session recovery, and analysis history
-- **Docker Support**: One-command deployment for development and production
-- **File Support**: CSV, JSON, and Parquet files
-- **Confidence Scoring**: Statistical confidence for attribution results
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
 
-## Data Format
+The `.venv` directory is local and gitignored. `requirements.txt` includes the runtime and test dependencies.
 
-Your CSV file should include these columns:
+## Run the API
 
-| Column | Required | Description |
-|--------|----------|-------------|
-| `timestamp` | ✅ | When the touchpoint occurred |
-| `channel` | ✅ | Marketing channel (email, social, etc.) |
-| `event_type` | ✅ | Type of event (click, conversion, etc.) |
-| `customer_id` | ❌ | Customer identifier |
-| `conversion_value` | ❌ | Value of conversion |
+From the repository root, activate the environment if needed, then run the single backend entrypoint:
 
-**Example:**
+```bash
+source .venv/bin/activate
+python run.py
+```
+
+The API listens on `http://localhost:8000`. Check that it is responding:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+The endpoint returns an HTTP response when the API is running; its JSON `status` also reflects dependency health and can report `unhealthy` when Redis is not available.
+
+Interactive API documentation is at <http://localhost:8000/docs>. Health routes include `/health`, `/health/ready`, and `/health/live`.
+
+## Test
+
+Run the complete test inventory, continuing past existing collection errors so runnable tests execute too:
+
+```bash
+python -m pytest -q --continue-on-collection-errors
+```
+
+The current test baseline and known failures are documented in [docs/b0-baseline.md](docs/b0-baseline.md). CI runs this same command on pushes to `main` and on pull requests.
+
+## Frontend
+
+The React application is in `frontend/`. To run its development server, use Node.js and npm, then run `npm install` and `npm run dev` from that directory. Frontend setup is separate from the Python API.
+
+## Docker
+
+Docker Compose files remain available for local container use. Review `docker-compose.yml` and `docker-compose.override.yml` for the current services and ports before starting them; this README documents the supported Python API path.
+
+## Attribution input
+
+CSV analysis expects `timestamp`, `channel`, and `event_type`. Customer and conversion fields such as `customer_id`, `session_id`, `email`, and `conversion_value` are optional. For example:
+
 ```csv
 timestamp,channel,event_type,customer_id,conversion_value
 2024-01-01 10:00:00,email,click,cust_001,
 2024-01-01 13:00:00,email,conversion,cust_001,100.00
 ```
 
-## API Usage
-
-**Upload and analyze data:**
-```bash
-curl -X POST "http://localhost:8000/attribution/analyze" \
-  -F "file=@data.csv" \
-  -F "model_type=linear"
-```
-
-**Response:**
-```json
-{
-  "results": {
-    "total_conversions": 3,
-    "channel_attributions": {
-      "email": {
-        "credit": 0.4,
-        "conversions": 1,
-        "revenue": 90.0,
-        "confidence": 0.85
-      }
-    }
-  }
-}
-```
-
-## Attribution Models
-
-| Model | Description |
-|-------|-------------|
-| `linear` | Equal credit to all touchpoints |
-| `time_decay` | More credit to recent touchpoints |
-| `first_touch` | All credit to first touchpoint |
-| `last_touch` | All credit to last touchpoint |
-| `position_based` | Weighted by position (40% first, 40% last, 20% middle) |
-
-## Testing
+Submit a CSV using the API:
 
 ```bash
-# Run all tests
-python3 scripts/run_tests.py
-
-# Run specific test types
-pytest tests/unit/          # Unit tests
-pytest tests/integration/   # Integration tests
-pytest tests/performance/   # Performance tests
+curl -X POST http://127.0.0.1:8000/attribution/analyze \
+  -F 'file=@data.csv' \
+  -F 'model_type=linear'
 ```
 
-## Development
-
-```bash
-# Backend development
-python3 run.py
-
-# Frontend development
-cd frontend && npm run dev
-
-# Docker development
-docker-compose -f docker-compose.yml -f docker-compose.override.yml up --build
-```
-
-## Documentation
-
-- [State Management Guide](frontend/STATE_MANAGEMENT.md)
-- [Docker Setup Guide](DOCKER_SETUP.md)
-- [API Documentation](http://localhost:8000/docs)
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.
+Available model names are `first_touch`, `last_touch`, `linear`, `time_decay`, and `position_based`.
