@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
 import time
+from urllib.parse import urlsplit
 
 from .config import get_settings
 from .api.routes import health_router, attribution_router
@@ -38,7 +39,12 @@ def create_app() -> FastAPI:
     
     # Add security middleware
     if settings.enable_api_key_auth:
-        app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.cors_origins)
+        allowed_hosts = {
+            "localhost",
+            "127.0.0.1",
+            *(urlsplit(origin).hostname for origin in settings.cors_origins if urlsplit(origin).hostname),
+        }
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=sorted(allowed_hosts))
     
     # Add CORS middleware
     app.add_middleware(

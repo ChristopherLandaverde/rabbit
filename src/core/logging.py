@@ -3,6 +3,7 @@
 import logging
 import json
 import time
+from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
 from fastapi import Request, Response
@@ -11,6 +12,11 @@ import structlog
 from contextlib import asynccontextmanager
 
 from ..config import get_settings
+
+
+# File handlers are configured during import, so create the ignored log
+# directory before any handler is constructed in a fresh checkout.
+Path("logs").mkdir(parents=True, exist_ok=True)
 
 
 class SecurityLogger:

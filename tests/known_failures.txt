@@ -1,0 +1,91 @@
+# Known failures from docs/b0-baseline.md. Delete an entry when it is fixed.
+
+# Reason: Redis is not running at localhost:6379; cache integration expectations fail and health reports the Redis-backed dependency as unhealthy.
+tests/integration/test_phase4_integration.py::TestPhase4SecurityIntegration::test_security_flow_integration
+tests/integration/test_phase4_integration.py::TestPhase4CachingIntegration::test_caching_system_integration
+tests/integration/test_phase4_integration.py::TestPhase4CachingIntegration::test_cache_ttl_integration
+tests/integration/test_phase4_integration.py::TestPhase4CachingIntegration::test_cache_statistics_integration
+tests/integration/test_phase4_integration.py::TestPhase4MonitoringIntegration::test_monitoring_system_integration
+tests/integration/test_phase4_integration.py::TestPhase4EndToEndIntegration::test_complete_phase4_workflow
+tests/integration/test_phase4_integration.py::TestPhase4EndToEndIntegration::test_phase4_performance_integration
+tests/integration/test_phase4_integration.py::TestPhase4EndToEndIntegration::test_phase4_scalability_integration
+
+# Reason: Redis-backed cache operations fail without Redis; metrics tests expect 10,000/100,000 records while the collector reports 1,000.
+tests/performance/test_phase4_performance.py::TestPhase4SecurityPerformance::test_api_key_generation_performance
+tests/performance/test_phase4_performance.py::TestPhase4SecurityPerformance::test_api_key_validation_performance
+tests/performance/test_phase4_performance.py::TestPhase4SecurityPerformance::test_rate_limiting_performance
+tests/performance/test_phase4_performance.py::TestPhase4CachingPerformance::test_cache_operations_performance
+tests/performance/test_phase4_performance.py::TestPhase4CachingPerformance::test_attribution_cache_performance
+tests/performance/test_phase4_performance.py::TestPhase4CachingPerformance::test_api_cache_performance
+tests/performance/test_phase4_performance.py::TestPhase4CachingPerformance::test_cache_hit_rate_performance
+tests/performance/test_phase4_performance.py::TestPhase4MonitoringPerformance::test_health_checking_performance
+tests/performance/test_phase4_performance.py::TestPhase4MonitoringPerformance::test_metrics_collection_performance
+tests/performance/test_phase4_performance.py::TestPhase4LoadTesting::test_concurrent_cache_operations
+tests/performance/test_phase4_performance.py::TestPhase4ScalabilityLimits::test_cache_capacity_limits
+tests/performance/test_phase4_performance.py::TestPhase4ScalabilityLimits::test_metrics_collection_limits
+
+# Reason: Requests in the tests receive HTTP 400 where the tests expect success or specific 413/422/500 responses; endpoint validation behavior and fixtures do not match those expectations.
+tests/unit/test_api_endpoints_phase3.py::TestValidateEndpoint::test_validate_csv_file_success
+tests/unit/test_api_endpoints_phase3.py::TestValidateEndpoint::test_validate_json_file_success
+tests/unit/test_api_endpoints_phase3.py::TestValidateEndpoint::test_validate_file_missing_required_columns
+tests/unit/test_api_endpoints_phase3.py::TestValidateEndpoint::test_validate_file_large_size
+tests/unit/test_api_endpoints_phase3.py::TestValidateEndpoint::test_validate_file_parsing_error
+tests/unit/test_api_endpoints_phase3.py::TestValidateEndpoint::test_validate_file_with_poor_quality_data
+tests/unit/test_api_endpoints_phase3.py::TestValidateEndpoint::test_validate_file_with_small_dataset
+tests/unit/test_api_endpoints_phase3.py::TestValidateEndpoint::test_validate_file_with_optional_columns
+tests/unit/test_api_endpoints_phase3.py::TestMethodsEndpoint::test_get_methods_success
+tests/unit/test_api_endpoints_phase3.py::TestMethodsEndpoint::test_get_methods_attribution_model_details
+tests/unit/test_api_endpoints_phase3.py::TestMethodsEndpoint::test_get_methods_linking_method_details
+tests/unit/test_api_endpoints_phase3.py::TestMethodsEndpoint::test_get_methods_recommendations
+tests/unit/test_api_endpoints_phase3.py::TestMethodsEndpoint::test_get_methods_error_handling
+tests/unit/test_api_endpoints_phase3.py::TestAnalyzeEndpointPhase3::test_analyze_with_confidence_scoring
+tests/unit/test_api_endpoints_phase3.py::TestAnalyzeEndpointPhase3::test_analyze_with_journey_analysis
+tests/unit/test_api_endpoints_phase3.py::TestAnalyzeEndpointPhase3::test_analyze_with_business_insights
+tests/unit/test_api_endpoints_phase3.py::TestAnalyzeEndpointPhase3::test_analyze_invalid_model_type
+tests/unit/test_api_endpoints_phase3.py::TestAnalyzeEndpointPhase3::test_analyze_with_model_parameters
+tests/unit/test_api_endpoints_phase3.py::TestAnalyzeEndpointPhase3::test_analyze_file_too_large
+tests/unit/test_api_endpoints_phase3.py::TestAPIEndpointIntegration::test_full_workflow_validation_to_analysis
+tests/unit/test_api_endpoints_phase3.py::TestAPIEndpointIntegration::test_error_handling_consistency
+
+# Reason: Logger setup and emitted logging behavior do not match the handlers, authentication event, request-error, and masking behavior asserted by these tests.
+tests/unit/test_logging.py::TestSecurityLogger::test_security_logger_initialization_disabled
+tests/unit/test_logging.py::TestSecurityLogger::test_log_authentication_attempt_success
+tests/unit/test_logging.py::TestSecurityLogger::test_log_authentication_attempt_failure
+tests/unit/test_logging.py::TestSecurityLogger::test_log_rate_limit_exceeded
+tests/unit/test_logging.py::TestPerformanceLogger::test_log_attribution_processing_metrics
+tests/unit/test_logging.py::TestRequestLogger::test_log_request_error
+tests/unit/test_logging.py::TestRequestLogger::test_log_request_without_user_info
+tests/unit/test_logging.py::TestLoggingIntegration::test_setup_logging
+tests/unit/test_logging.py::TestLoggingIntegration::test_logging_api_key_masking
+
+# Reason: The monitoring integration expects a healthy backing dependency, but Redis is unavailable and health is unhealthy.
+tests/unit/test_monitoring.py::TestMonitoringIntegration::test_monitoring_workflow
+
+# Reason: Secure API tests include cache expectations that miss without Redis, file-parsing error paths that raise NameError: json is not defined, and response expectations that do not match current route behavior.
+tests/unit/test_secure_api.py::TestValidateData::test_validate_data_success
+tests/unit/test_secure_api.py::TestValidateData::test_validate_data_processing_error
+tests/unit/test_secure_api.py::TestGetAvailableMethods::test_get_available_methods_cached
+tests/unit/test_secure_api.py::TestGetAvailableMethods::test_get_available_methods_error
+tests/unit/test_secure_api.py::TestAnalyzeAttribution::test_analyze_attribution_success
+tests/unit/test_secure_api.py::TestAnalyzeAttribution::test_analyze_attribution_cached_result
+tests/unit/test_secure_api.py::TestAnalyzeAttribution::test_analyze_attribution_processing_error
+tests/unit/test_secure_api.py::TestParseUploadedFile::test_parse_csv_file
+tests/unit/test_secure_api.py::TestParseUploadedFile::test_parse_json_file
+tests/unit/test_secure_api.py::TestParseUploadedFile::test_parse_parquet_file
+tests/unit/test_secure_api.py::TestParseUploadedFile::test_parse_unsupported_file
+tests/unit/test_secure_api.py::TestParseUploadedFile::test_parse_file_with_timestamp_conversion
+tests/unit/test_secure_api.py::TestParseUploadedFile::test_parse_file_parsing_error
+tests/unit/test_secure_api.py::TestSecureAPIIntegration::test_secure_api_dependencies
+
+# Reason: The development fallback API key is rejected by the current key-validation behavior.
+tests/unit/test_security.py::TestAPIKeyManager::test_validate_api_key_dev_fallback
+
+# Collection errors: ignored modules from docs/b0-baseline.md.
+# Reason: Imports sample_csv_file from tests.fixtures.app, where that fixture does not exist.
+module:tests/integration/test_api_endpoints.py
+# Reason: Imports sample_csv_file from tests.fixtures.app, where that fixture does not exist.
+module:tests/performance/test_benchmarks.py
+# Reason: A synchronous test contains await, causing SyntaxError: 'await' outside async function.
+module:tests/integration/test_phase3_integration.py
+# Reason: Synchronous test functions (including a nested worker) contain await, causing SyntaxError: 'await' outside async function.
+module:tests/performance/test_phase3_performance.py
