@@ -4,6 +4,8 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
+import asyncio
+import os
 import time
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
@@ -21,6 +23,8 @@ from .v2.auth.errors import ApiProblem, problem_content, problem
 from .v2.auth.admin import admin_router
 from .v2.auth.signup import signup_router
 from .v2.datasets import router as datasets_router
+from .v2.analyses import router as analyses_router, run_worker
+from .v2.datasets import get_storage
 from .v2.sample_dataset import router as sample_dataset_router
 from .v2.auth.service import authenticate
 from .v2.auth.limits import check_request_limit
@@ -42,9 +46,18 @@ async def lifespan(app: FastAPI):
         decode_responses=True,
     )
     print(f"Starting {settings.app_name} v{settings.version}")
+    worker_stop, worker = asyncio.Event(), None
+    if settings.rabbit_v2_enabled and os.getenv("RABBIT_ANALYSIS_WORKER") == "1":
+        # Background loop for queued analyses (e.g. left over from a restart).
+        worker = asyncio.create_task(
+            run_worker(async_session_factory, get_storage(), stop=worker_stop)
+        )
     try:
         yield
     finally:
+        if worker is not None:
+            worker_stop.set()
+            await worker
         await app.state.redis.aclose()
         await engine.dispose()
     print("Shutting down application")
@@ -178,6 +191,7 @@ def create_app() -> FastAPI:
         app.include_router(signup_router, prefix="/v2")
         app.include_router(admin_router, prefix="/v2")
         app.include_router(datasets_router, prefix="/v2")
+        app.include_router(analyses_router, prefix="/v2")
         app.include_router(sample_dataset_router, prefix="/v2")
     
     return app
