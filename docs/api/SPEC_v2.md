@@ -500,6 +500,8 @@ Stable codes (initial set; never removed, only added):
 - `negative_value_coerced`
 - `duplicate_row_dropped`
 - `unknown_channel_normalized`
+- `invalid_numeric_format` — the existing validator found a non-numeric value.
+- `invalid_file_format` — the uploaded CSV, JSON, or Parquet file could not be parsed.
 
 ## 7. Comparison math (`model_agreement_score`)
 
