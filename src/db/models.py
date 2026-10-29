@@ -35,6 +35,16 @@ class ApiKey(Base):
         return not self.is_test
 
 
+class SignupEvent(Base):
+    __tablename__ = "signup_events"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    key_id: Mapped[str] = mapped_column(ForeignKey("api_keys.id"), nullable=False, index=True)
+    email: Mapped[str | None] = mapped_column(Text)
+    use_case: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class Dataset(Base):
     __tablename__ = "datasets"
 

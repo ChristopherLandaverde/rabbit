@@ -18,6 +18,7 @@ from .db.session import engine
 from .v2.router import v2_router
 from .v2.auth.errors import ApiProblem, problem_content
 from .v2.auth.admin import admin_router
+from .v2.auth.signup import signup_router
 from .v2.auth.service import authenticate
 
 
@@ -87,7 +88,8 @@ def create_app() -> FastAPI:
         path = request.url.path
         if settings.rabbit_v2_enabled and path.startswith("/v2/") and path != "/v2/health":
             is_admin = path.startswith("/v2/admin/keys")
-            if not is_admin:
+            is_signup = path == "/v2/keys/signup"
+            if not (is_admin or is_signup):
                 _, auth_error = await authenticate(request)
                 if auth_error:
                     return auth_error
@@ -124,6 +126,7 @@ def create_app() -> FastAPI:
     app.include_router(attribution_router, prefix="/attribution", tags=["Attribution"])
     if settings.rabbit_v2_enabled:
         app.include_router(v2_router, prefix="/v2")
+        app.include_router(signup_router, prefix="/v2")
         app.include_router(admin_router, prefix="/v2")
     
     return app
