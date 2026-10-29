@@ -28,8 +28,8 @@ def test_v2_health_and_openapi_are_scoped(monkeypatch):
         assert client.get("/openapi.json").status_code == 404
 
         schema = client.get("/v2/openapi.json")
-        assert schema.status_code == 200
-        assert set(schema.json()["paths"]) == {"/v2/health"}
+        assert schema.status_code == 401
+        assert schema.json()["code"] == "missing_api_key"
 
 
 def test_v2_routes_are_hidden_when_disabled(monkeypatch):

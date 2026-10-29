@@ -25,9 +25,24 @@ class ApiKey(Base):
     key_prefix: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     scopes: Mapped[list[str]] = mapped_column(JSON_VALUE, nullable=False)
-    rate_limit_per_minute: Mapped[int] = mapped_column(Integer, nullable=False)
+    rate_limit_per_minute: Mapped[int | None] = mapped_column(Integer)
+    is_test: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @property
+    def livemode(self) -> bool:
+        return not self.is_test
+
+
+class SignupEvent(Base):
+    __tablename__ = "signup_events"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    key_id: Mapped[str] = mapped_column(ForeignKey("api_keys.id"), nullable=False, index=True)
+    email: Mapped[str | None] = mapped_column(Text)
+    use_case: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class Dataset(Base):
