@@ -20,6 +20,8 @@ from .v2.router import v2_router
 from .v2.auth.errors import ApiProblem, problem_content, problem
 from .v2.auth.admin import admin_router
 from .v2.auth.signup import signup_router
+from .v2.datasets import router as datasets_router
+from .v2.sample_dataset import router as sample_dataset_router
 from .v2.auth.service import authenticate
 from .v2.auth.limits import check_request_limit
 from .db.models import AuditLog
@@ -93,7 +95,7 @@ def create_app() -> FastAPI:
         path = request.url.path
         key = None
         limit_headers = {}
-        if settings.rabbit_v2_enabled and path.startswith("/v2/") and path != "/v2/health":
+        if settings.rabbit_v2_enabled and path.startswith("/v2/") and path not in {"/v2/health", "/v2/sample-dataset"}:
             is_admin = path.startswith("/v2/admin/keys")
             is_signup = path == "/v2/keys/signup"
             if not (is_admin or is_signup):
@@ -175,6 +177,8 @@ def create_app() -> FastAPI:
         app.include_router(v2_router, prefix="/v2")
         app.include_router(signup_router, prefix="/v2")
         app.include_router(admin_router, prefix="/v2")
+        app.include_router(datasets_router, prefix="/v2")
+        app.include_router(sample_dataset_router, prefix="/v2")
     
     return app
 
