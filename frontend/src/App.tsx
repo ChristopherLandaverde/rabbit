@@ -3,7 +3,6 @@ import {
   Container,
   Box,
   Button,
-  Paper,
   Typography,
   Stepper,
   Step,
@@ -30,7 +29,6 @@ import StateRecovery from './components/StateRecovery';
 import Settings from './components/Settings';
 import { useAppState } from './hooks/useAppState';
 import { attributionApi } from './services/api';
-import type { AttributionModel, AttributionResponse } from './types/api';
 
 const theme = createTheme({
   palette: {

@@ -27,7 +27,7 @@ export function useSessionRecovery({
       if (sessionState.results) {
         // We have results to show
         onRecoverResults();
-      } else if (sessionState.selectedFile || sessionState.activeStep > 0) {
+      } else if (sessionState.selectedFile || (sessionState.activeStep ?? 0) > 0) {
         // We have a workflow in progress
         onRecoverSession(sessionState);
       }

@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
 import {
   Box,
-  Button,
   Paper,
   Typography,
   LinearProgress,
@@ -19,12 +18,10 @@ interface FileUploadProps {
 
 export default function FileUpload({
   onFileSelect,
-  onValidationStart,
-  onValidationComplete,
   disabled = false,
 }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
