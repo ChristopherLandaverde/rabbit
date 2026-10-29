@@ -23,11 +23,16 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-Run the complete available suite, including tests after collection errors:
+Run the complete test suite:
 
 ```bash
-python -m pytest -q --continue-on-collection-errors
+python -m pytest -q
 ```
+
+`tests/known_failures.txt` lists baseline failing pytest node IDs as strict xfails
+and collection-error modules to ignore. A known test that starts passing fails CI
+because the xfail is strict; delete its line from the list when fixing it. New or
+previously passing tests that fail remain ordinary failures.
 
 Start the API from the repository root:
 

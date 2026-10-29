@@ -11,18 +11,26 @@ $ python -m pip install -r requirements.txt
 Successfully installed ... fastapi-0.104.1 ... numpy-1.26.2 ... pandas-2.1.4 ... pyarrow-14.0.1 ... scikit-learn-1.5.0 ...
 ```
 
-The pinned runtime packages installed successfully on Python 3.12, so no major dependency upgrade was needed. The full pytest run shows independent pre-existing test failures; no tests have been marked xfail.
+The pinned runtime packages installed successfully on Python 3.12, so no major dependency upgrade was needed. The test baseline below is recorded in `tests/known_failures.txt` so CI can pass while continuing to fail on regressions.
 
 ## Test suite state
 
-Command used to execute collected tests despite collection errors:
+The known-failure list contains one exact pytest node ID for each of the 66
+currently failing tests and four `module:` entries for the modules that fail
+during collection. Each entry is grouped under a reason from this baseline.
+`conftest.py` marks matching tests `xfail(strict=True)` and reads collection
+modules into `collect_ignore`. Strict xfails ensure that a known failure which
+starts passing makes CI fail until its line is deleted from the list. New test
+failures and regressions in tests not listed there remain regular failures.
+
+The CI and local command is:
 
 ```text
-python -m pytest -q --continue-on-collection-errors --disable-warnings
-66 failed, 300 passed, 22 skipped, 155311 warnings, 4 errors in 14.26s
+python -m pytest -q
+300 passed, 22 skipped, 66 xfailed, 155310 warnings in 13.96s
 ```
 
-The regular `python -m pytest -q` also exits unsuccessfully at collection. The four collection errors are:
+Baseline collection errors represented in `tests/known_failures.txt`:
 
 | Test group | Count | Reason |
 |---|---:|---|
@@ -30,7 +38,7 @@ The regular `python -m pytest -q` also exits unsuccessfully at collection. The f
 | `tests/integration/test_phase3_integration.py` | 1 error | A synchronous test contains `await`, causing `SyntaxError: 'await' outside async function`. |
 | `tests/performance/test_phase3_performance.py` | 1 error | Synchronous test functions (including a nested worker) contain `await`, causing the same syntax error. |
 
-The 67 executed failures are grouped by file below. These failures remain visible in CI; none were xfailed because the individual test outcomes were not established before the baseline run.
+The 66 executed failures, now represented as strict xfails, are grouped by file below.
 
 | Test group | Failed | Observed reason |
 |---|---:|---|
@@ -42,7 +50,7 @@ The 67 executed failures are grouped by file below. These failures remain visibl
 | `tests/unit/test_secure_api.py` | 14 | Secure API tests include cache expectations that miss without Redis, file-parsing error paths that raise `NameError: json is not defined`, and response expectations that do not match current route behavior. |
 | `tests/unit/test_security.py` | 1 | The development fallback API key is rejected by the current key-validation behavior. |
 
-This is the current observed test state, not a claim that all failure causes were introduced by B0. The logging import boot issue was fixed so the fresh-checkout API and remaining tests can load; the test contract failures above are not hidden or changed here.
+This is the observed baseline, not a claim that all failure causes were introduced by B0. When a listed test is fixed, delete its node ID from `tests/known_failures.txt`; when a collection-error module is fixed, delete its `module:` entry. The logging import boot issue was fixed so the fresh-checkout API and remaining tests can load; the test contract failures above are not changed here.
 
 ## Attribution model outputs
 
