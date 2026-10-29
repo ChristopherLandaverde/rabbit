@@ -37,7 +37,10 @@ class TimeDecayAttributionModel(AttributionModel):
         
         # Calculate weights for each touchpoint
         for i, touchpoint in enumerate(journey.touchpoints):
-            days_before_conversion = (conversion_time - touchpoint.timestamp).days
+            # Fractional days: timedelta.days truncates sub-day gaps to 0 (#27)
+            days_before_conversion = (
+                conversion_time - touchpoint.timestamp
+            ).total_seconds() / 86400
             weight = 2 ** (-days_before_conversion / self.half_life_days)
             weights[i] = weight
             total_weight += weight

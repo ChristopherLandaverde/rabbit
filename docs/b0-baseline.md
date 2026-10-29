@@ -30,6 +30,13 @@ python -m pytest -q
 300 passed, 22 skipped, 66 xfailed, 155310 warnings in 13.96s
 ```
 
+After the #27 time-decay fix (two new attribution unit tests, no known failure
+changed state):
+
+```text
+302 passed, 22 skipped, 66 xfailed, 155310 warnings in 9.01s
+```
+
 Baseline collection errors represented in `tests/known_failures.txt`:
 
 | Test group | Count | Reason |
@@ -67,4 +74,34 @@ position_based: {"email": 1.4000000000000001, "organic": 0.8,
                  "paid_search": 0.29999999999999993, "social": 0.5}
 ```
 
-No attribution calculations or model code were changed.
+No attribution calculations or model code were changed in B0.
+
+### Time decay fix (#27)
+
+In the B0 outputs above, `time_decay` is identical to `linear`. That was a bug,
+not a property of the data: `TimeDecayAttributionModel` measured the gap to
+conversion with `timedelta.days`, which truncates to whole days. Every journey
+in `test_data.csv` spans 2-3 hours, so every gap became 0 days, every weight
+became `2 ** 0 = 1`, and the model degenerated to equal credit. Timestamps were
+parsed correctly and the 7-day half-life unit was correct.
+
+The fix uses fractional days (`total_seconds() / 86400`). Outputs on
+`test_data.csv` after the fix (same command, raw aggregate credits):
+
+```text
+first_touch:   {"email": 1.0, "organic": 1.0, "social": 1.0}
+last_touch:    {"email": 2.0, "organic": 1.0}
+linear:        {"email": 1.1666666666666665, "organic": 0.6666666666666666,
+                "paid_search": 0.5833333333333333, "social": 0.5833333333333333}
+time_decay:    {"email": 1.1675575570284877, "organic": 0.6664402106746266,
+                "paid_search": 0.5836586373343504, "social": 0.5823435949625355}
+position_based: {"email": 1.4000000000000001, "organic": 0.8,
+                 "paid_search": 0.29999999999999993, "social": 0.5}
+```
+
+Only `time_decay` changed. It now differs from `linear`, but only slightly:
+with the default 7-day half-life, a touchpoint 3 hours before conversion keeps
+`2 ** (-3 / 168) = 98.8%` of the weight of the converting touch. Use a shorter
+`half_life_days` to see a larger recency effect on short journeys. The four
+other models are byte-for-byte unchanged and remain the regression reference.
+

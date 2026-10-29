@@ -172,6 +172,88 @@ class TestTimeDecayAttributionModel:
         assert attribution['paid_search'] > attribution['email']
         assert attribution['paid_search'] > attribution['social']
 
+    def test_time_decay_uses_fractional_days_hand_calculated(self):
+        """Time decay must use the exact elapsed time, not whole days (#27).
+
+        Journey (half_life_days=1.0), conversion at 2024-01-02 10:00:
+
+            touchpoint    timestamp          days before   weight = 2 ** (-days / 1)
+            email         2024-01-01 10:00   1.0           0.5
+            social        2024-01-01 22:00   0.5           2 ** -0.5 = 0.70710678
+            paid_search   2024-01-02 10:00   0.0           1.0
+
+            total weight = 0.5 + 0.70710678 + 1.0 = 2.20710678
+            email        = 0.5        / 2.20710678 = 0.22654092
+            social       = 0.70710678 / 2.20710678 = 0.32037724
+            paid_search  = 1.0        / 2.20710678 = 0.45308184
+
+        Linear would give 1/3 each. The old code truncated with
+        ``timedelta.days`` so social's 12 hours became 0 days, giving
+        weights 0.5 / 1.0 / 1.0 -> 0.2 / 0.4 / 0.4 (social tied with the
+        conversion touchpoint).
+        """
+        from src.models.touchpoint import CustomerJourney, Touchpoint
+        from src.models.enums import EventType
+        from datetime import datetime
+
+        def tp(ts, channel, event_type=EventType.CLICK):
+            return Touchpoint(timestamp=ts, channel=channel,
+                              event_type=event_type, customer_id="cust_001")
+
+        journey = CustomerJourney(
+            touchpoints=[
+                tp(datetime(2024, 1, 1, 10, 0), "email"),
+                tp(datetime(2024, 1, 1, 22, 0), "social"),
+                tp(datetime(2024, 1, 2, 10, 0), "paid_search", EventType.CONVERSION),
+            ],
+            total_conversions=1,
+            total_revenue=100.0,
+            journey_id="cust_001",
+        )
+
+        attribution = TimeDecayAttributionModel(half_life_days=1.0).calculate_attribution(journey)
+
+        assert attribution["email"] == pytest.approx(0.22654092, abs=1e-8)
+        assert attribution["social"] == pytest.approx(0.32037724, abs=1e-8)
+        assert attribution["paid_search"] == pytest.approx(0.45308184, abs=1e-8)
+        assert sum(attribution.values()) == pytest.approx(1.0, abs=1e-12)
+
+        linear = LinearAttributionModel().calculate_attribution(journey)
+        assert attribution != pytest.approx(linear)
+
+    def test_time_decay_differs_from_linear_within_one_day(self):
+        """Same-day journeys (like every journey in test_data.csv) still decay.
+
+        Touchpoints 3h, 1.5h, 1h and 0h before conversion, default 7-day
+        half-life: weight = 2 ** (-hours / 24 / 7), i.e. 0.98770, 0.99383,
+        0.99588, 1.0 (sum 3.97741) -> credits 0.24833, 0.24987, 0.25038,
+        0.25142. Each later touchpoint gets strictly more credit than linear's
+        flat 0.25; the effect is small because 3 hours is tiny next to a week.
+        """
+        from src.models.touchpoint import CustomerJourney, Touchpoint
+        from src.models.enums import EventType
+        from datetime import datetime
+
+        stamps = [(10, 0), (11, 30), (12, 0), (13, 0)]
+        channels = ["a", "b", "c", "d"]
+        journey = CustomerJourney(
+            touchpoints=[
+                Touchpoint(timestamp=datetime(2024, 1, 1, h, m), channel=ch,
+                           event_type=EventType.CLICK, customer_id="c")
+                for (h, m), ch in zip(stamps, channels)
+            ],
+            total_conversions=1,
+            total_revenue=100.0,
+            journey_id="c",
+        )
+
+        attribution = TimeDecayAttributionModel().calculate_attribution(journey)
+
+        expected = [0.24832699, 0.24986861, 0.25038460, 0.25141979]
+        for ch, value in zip(channels, expected):
+            assert attribution[ch] == pytest.approx(value, abs=1e-8)
+        assert attribution["a"] < attribution["b"] < attribution["c"] < attribution["d"]
+
 
 @pytest.mark.unit
 @pytest.mark.algorithm
