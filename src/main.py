@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
 import time
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
 from redis.asyncio import Redis
 from fastapi.responses import JSONResponse
@@ -16,10 +17,14 @@ from .core.logging import setup_logging, request_logger, performance_logger
 from .core.monitoring import health_checker
 from .db.session import engine
 from .v2.router import v2_router
-from .v2.auth.errors import ApiProblem, problem_content
+from .v2.auth.errors import ApiProblem, problem_content, problem
 from .v2.auth.admin import admin_router
 from .v2.auth.signup import signup_router
 from .v2.auth.service import authenticate
+from .v2.auth.limits import check_request_limit
+from .db.models import AuditLog
+from .db.session import async_session_factory
+from ulid import ULID
 
 
 @asynccontextmanager
@@ -86,19 +91,61 @@ def create_app() -> FastAPI:
     async def log_requests(request: Request, call_next):
         start_time = time.time()
         path = request.url.path
+        key = None
+        limit_headers = {}
         if settings.rabbit_v2_enabled and path.startswith("/v2/") and path != "/v2/health":
             is_admin = path.startswith("/v2/admin/keys")
             is_signup = path == "/v2/keys/signup"
             if not (is_admin or is_signup):
-                _, auth_error = await authenticate(request)
+                key, auth_error = await authenticate(request)
                 if auth_error:
                     return auth_error
+                request.state.request_id = request.headers.get("X-Request-ID") or str(ULID())
+                if key.is_test:
+                    limit_headers = {
+                        "X-RateLimit-Limit": "unlimited",
+                        "X-RateLimit-Remaining": "unlimited",
+                        "X-RateLimit-Reset": "0",
+                    }
+                else:
+                    limit_headers, retry_after = await check_request_limit(request, key)
+                    if retry_after is not None:
+                        response = problem(
+                            429, "rate_limited", "Rate limit exceeded",
+                            "This API key has exceeded its per-minute request limit.",
+                            "Wait for the rate-limit window to reset or request a higher limit.",
+                            "https://docs.rabbit.example/rate-limits",
+                        )
+                        response.headers.update(limit_headers)
+                        response.headers["Retry-After"] = str(retry_after)
+                        return response
         
         # Log request start
         performance_logger.logger.info(f"Request started: {request.method} {request.url}")
         
         try:
             response = await call_next(request)
+
+            if key is not None:
+                response.headers.update(limit_headers)
+                if request.method in {"POST", "PUT", "DELETE"}:
+                    try:
+                        parts = request.url.path.strip("/").split("/")
+                        resource_type = parts[1] if len(parts) > 1 else None
+                        resource_id = parts[2] if len(parts) > 2 else None
+                        session_factory = getattr(app.state, "api_session_factory", async_session_factory)
+                        async with session_factory() as session:
+                            session.add(AuditLog(
+                                id=str(ULID()), key_id=key.id, action=request.method,
+                                resource_type=resource_type, resource_id=resource_id,
+                                request_id=getattr(request.state, "request_id", None),
+                                ip=request.client.host if request.client else None,
+                                user_agent=request.headers.get("User-Agent"),
+                                created_at=datetime.now(timezone.utc),
+                            ))
+                            await session.commit()
+                    except Exception as exc:
+                        performance_logger.logger.warning(f"Could not write v2 audit log: {exc}")
 
             # Record request metrics
             processing_time = time.time() - start_time
