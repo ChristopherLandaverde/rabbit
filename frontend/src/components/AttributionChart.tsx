@@ -1,6 +1,6 @@
 import { Box, Paper, Typography } from '@mui/material';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
-import type { AttributionResults } from '../types/api';
+import type { AttributionResults, ChannelAttribution } from '../types/api';
 
 interface AttributionChartProps {
   results: AttributionResults;
@@ -10,7 +10,9 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'
 
 export default function AttributionChart({ results }: AttributionChartProps) {
   // Handle different possible data structures
-  const channel_attribution = (results as any).channel_attribution || (results as any).channel_attributions || {};
+  const channel_attribution: Record<string, ChannelAttribution> =
+    results.channel_attribution ||
+    (results as AttributionResults & { channel_attributions?: Record<string, ChannelAttribution> }).channel_attributions || {};
   
   // Check if we have data
   if (!channel_attribution || Object.keys(channel_attribution).length === 0) {
@@ -70,12 +72,12 @@ export default function AttributionChart({ results }: AttributionChartProps) {
             cx="50%"
             cy="50%"
             labelLine={false}
-            label={({ name, value }) => `${name}: ${value.toFixed(1)}%`}
+            label={({ name, value }) => `${name}: ${(value as number).toFixed(1)}%`}
             outerRadius={120}
             fill="#8884d8"
             dataKey="value"
           >
-            {chartData.map((entry, index) => (
+            {chartData.map((_, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
             ))}
           </Pie>

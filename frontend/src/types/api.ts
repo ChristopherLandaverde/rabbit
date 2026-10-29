@@ -99,6 +99,13 @@ export interface ValidationResponse {
 export type AttributionModel = 'first_touch' | 'last_touch' | 'linear' | 'time_decay' | 'position_based';
 export type LinkingMethod = 'auto' | 'customer_id' | 'session_email' | 'email_only' | 'aggregate';
 
+export interface UserPreferences {
+  defaultModel: AttributionModel;
+  autoSave: boolean;
+  showAdvancedOptions: boolean;
+  theme: 'light' | 'dark' | 'auto';
+}
+
 export interface AnalysisConfig {
   model?: AttributionModel;
   linking_method?: LinkingMethod;

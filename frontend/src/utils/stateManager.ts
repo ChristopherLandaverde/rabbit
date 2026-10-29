@@ -1,4 +1,6 @@
-import type { AttributionResponse, AttributionModel } from '../types/api';
+import type { AttributionResponse, AttributionModel, UserPreferences } from '../types/api';
+
+export type { UserPreferences } from '../types/api';
 
 // State interfaces
 export interface AppState {
@@ -19,13 +21,6 @@ export interface AnalysisHistoryItem {
   model: AttributionModel;
   results: AttributionResponse;
   fileSize: number;
-}
-
-export interface UserPreferences {
-  defaultModel: AttributionModel;
-  autoSave: boolean;
-  showAdvancedOptions: boolean;
-  theme: 'light' | 'dark' | 'auto';
 }
 
 // Storage keys

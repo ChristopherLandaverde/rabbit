@@ -11,7 +11,7 @@ import {
   Chip,
   Tooltip,
 } from '@mui/material';
-import type { AttributionResults } from '../types/api';
+import type { AttributionResults, ChannelAttribution } from '../types/api';
 
 interface AttributionTableProps {
   results: AttributionResults;
@@ -21,7 +21,9 @@ interface AttributionTableProps {
 
 export default function AttributionTable({ results, showKPIsOnly = false, showTableOnly = false }: AttributionTableProps) {
   // Handle different possible data structures
-  const channel_attribution = (results as any).channel_attribution || (results as any).channel_attributions || {};
+  const channel_attribution: Record<string, ChannelAttribution> =
+    results.channel_attribution ||
+    (results as AttributionResults & { channel_attributions?: Record<string, ChannelAttribution> }).channel_attributions || {};
   
   // Get summary data from the correct location
   const total_conversions = (results as any).total_conversions || 0;

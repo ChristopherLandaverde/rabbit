@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { stateManager, type AppState, type UserPreferences, type AnalysisHistoryItem } from '../utils/stateManager';
-import type { AttributionResponse, AttributionModel } from '../types/api';
+import { stateManager, type AppState, type AnalysisHistoryItem } from '../utils/stateManager';
+import type { AttributionResponse, AttributionModel, UserPreferences } from '../types/api';
 
 export interface UseAppStateReturn {
   // State
