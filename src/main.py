@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 import time
 from urllib.parse import urlsplit
 from redis.asyncio import Redis
+from fastapi.responses import JSONResponse
 
 from .config import get_settings
 from .api.routes import health_router, attribution_router
@@ -15,6 +16,9 @@ from .core.logging import setup_logging, request_logger, performance_logger
 from .core.monitoring import health_checker
 from .db.session import engine
 from .v2.router import v2_router
+from .v2.auth.errors import ApiProblem, problem_content
+from .v2.auth.admin import admin_router
+from .v2.auth.service import authenticate
 
 
 @asynccontextmanager
@@ -49,6 +53,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         openapi_url=None,
     )
+
+    @app.exception_handler(ApiProblem)
+    async def api_problem_handler(request: Request, exc: ApiProblem):
+        return JSONResponse(
+            status_code=exc.status,
+            media_type="application/problem+json",
+            content=problem_content(exc.status, exc.code, exc.title, exc.detail, exc.fix_hint, exc.doc_url),
+        )
     
     # Add security middleware
     if settings.enable_api_key_auth:
@@ -72,13 +84,20 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
         start_time = time.time()
+        path = request.url.path
+        if settings.rabbit_v2_enabled and path.startswith("/v2/") and path != "/v2/health":
+            is_admin = path.startswith("/v2/admin/keys")
+            if not is_admin:
+                _, auth_error = await authenticate(request)
+                if auth_error:
+                    return auth_error
         
         # Log request start
         performance_logger.logger.info(f"Request started: {request.method} {request.url}")
         
         try:
             response = await call_next(request)
-            
+
             # Record request metrics
             processing_time = time.time() - start_time
             health_checker.record_request(success=response.status_code < 400)
@@ -105,6 +124,7 @@ def create_app() -> FastAPI:
     app.include_router(attribution_router, prefix="/attribution", tags=["Attribution"])
     if settings.rabbit_v2_enabled:
         app.include_router(v2_router, prefix="/v2")
+        app.include_router(admin_router, prefix="/v2")
     
     return app
 
