@@ -27,6 +27,14 @@ redis==5.0.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 
+# Rabbit v2 infrastructure
+SQLAlchemy[asyncio]==2.1.6
+asyncpg==0.32.0
+alembic==1.20.1
+boto3==1.43.122
+python-ulid==4.1.0
+PyNaCl==1.6.2
+
 # System monitoring
 psutil==5.9.6
 
