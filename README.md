@@ -7,7 +7,7 @@
 
 [Quick start](#quick-start) · [Same data, five models](#same-data-five-models) · [Known limits](#known-limits) · [Usage guide](docs/usage.md)
 
-On the bundled sample of 10 touchpoints, email gets **33%** of conversion credit under first-touch and **67%** under last-touch: $75 or $150 of the same $225 in revenue, depending only on the model.
+On the bundled sample of 10 touchpoints, email gets **33%** of conversion credit under first-touch and **67%** under last-touch. Same data, same conversions; only the model changed.
 
 Rabbit is a small self-hosted API for marketing analysts and RevOps people choosing or defending an attribution model, and for engineers who want an attribution endpoint they run themselves. Post a CSV of touchpoints; get each channel's share of conversion credit under first-touch, last-touch, linear, time-decay or position-based. Results describe attribution under the named model; they do not estimate causal impact.
 
