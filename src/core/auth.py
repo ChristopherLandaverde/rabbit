@@ -60,10 +60,15 @@ async def get_current_user(
         )
 
 
-async def require_permission(permission: str):
+def require_permission(permission: str):
     """
     Dependency factory for permission-based access control.
-    
+
+    This must stay a plain (synchronous) function: FastAPI's ``Depends`` needs
+    the returned checker to be callable. Declared ``async``, the factory would
+    return an un-awaited coroutine and every ``require_*_permission`` below
+    would be unusable as a dependency.
+
     Args:
         permission: Required permission (read, write, admin)
         
