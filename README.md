@@ -13,6 +13,10 @@ Rabbit is a small self-hosted API for marketing analysts and RevOps people choos
 
 ## Same data, five models
 
+<img src="docs/media/five-models.gif" width="880" alt="Terminal frames of real Rabbit API output on the bundled test_data.csv: the same curl request run with model_type first_touch, last_touch, linear and position_based. Email's credit share goes 33%, 67%, 39%, 47%; paid_search is absent under first_touch and last_touch, then gets 19% under linear and 10% under position_based.">
+
+Real API responses to the quick-start request below, one model per frame. Channels with no credit are left out of the response. `time_decay` is skipped because it matches `linear` on this sample.
+
 Share of conversion credit per channel on `test_data.csv` (3 customers, 10 touchpoints, 3 conversions), real API output rounded to whole percent:
 
 | Channel | `first_touch` | `last_touch` | `linear` | `time_decay` | `position_based` |
