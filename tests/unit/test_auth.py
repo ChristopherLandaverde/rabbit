@@ -116,8 +116,10 @@ class TestGetCurrentUser:
             await get_current_user(mock_request, mock_credentials)
         
         assert exc_info.value.status_code == 401
-        assert "authentication_failed" in str(exc_info.value.detail)
-        assert "Connection error" in str(exc_info.value.detail)
+        assert exc_info.value.detail["error"] == "authentication_failed"
+        assert exc_info.value.detail["message"] == "Authentication failed"
+        # Internal exception text must not leak to the client.
+        assert "Connection error" not in str(exc_info.value.detail)
 
 
 class TestRequirePermission:
@@ -457,3 +459,28 @@ class TestAuthIntegration:
         # Dev user should not have admin permission
         with pytest.raises(HTTPException):
             await require_admin_permission(user_info)
+
+    def test_permission_dependencies_enforce_on_routes(self):
+        """Permission dependencies can be wired into routes and enforce access."""
+        from fastapi import Depends, FastAPI
+
+        app = FastAPI()
+
+        @app.get("/read")
+        async def read_route(user=Depends(require_read_permission)):
+            return {"user_id": user["user_id"]}
+
+        @app.get("/admin")
+        async def admin_route(user=Depends(require_admin_permission)):
+            return {"user_id": user["user_id"]}
+
+        app.dependency_overrides[get_current_user] = lambda: {
+            "user_id": "reader",
+            "permissions": ["read"],
+        }
+        client = TestClient(app)
+
+        assert client.get("/read").json() == {"user_id": "reader"}
+        response = client.get("/admin")
+        assert response.status_code == 403
+        assert response.json()["detail"]["error"] == "insufficient_permissions"

@@ -62,6 +62,31 @@ Redis-related strict xfails that pass with the service were removed. Any live
 Redis tests that still fail for a separate reason remain strict xfails with
 that cause recorded; other live Redis checks pass with the service.
 
+### pytest 9 and active async tests
+
+Until the pytest 9 upgrade, `pytest.ini` used the `[tool:pytest]` header, which
+pytest only reads from `setup.cfg`. The whole file was ignored, so
+`asyncio_mode = auto` never applied and the 22 unmarked `async def` tests in
+`tests/unit/test_auth.py` were skipped ("async def function and no async plugin
+installed"). Those were the 22 skips above. The header is now `[pytest]`, with
+pytest 9.0.3 and pytest-asyncio 1.4.1. Once those tests ran, they found that
+`require_permission` was declared `async`, which made `require_read_permission`,
+`require_write_permission` and `require_admin_permission` un-awaited coroutines
+that FastAPI refuses as dependencies. The factory is now a plain function.
+
+With Redis 7 and Postgres 16 running:
+
+```text
+python -m pytest -q --ignore=tests/v2
+338 passed, 53 xfailed, 156502 warnings
+
+python -m pytest -q tests/v2
+49 passed, 49 warnings
+```
+
+With Redis unavailable, the v1 command produces
+`325 passed, 14 skipped, 52 xfailed`; the 14 skips are all `needs Redis`.
+
 Baseline collection errors represented in `tests/known_failures.txt`:
 
 | Test group | Count | Reason |
