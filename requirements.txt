@@ -24,7 +24,6 @@ structlog==23.2.0
 
 # Security and authentication
 redis==5.0.1
-python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 argon2-cffi==23.1.0
 
@@ -56,4 +55,4 @@ flake8==6.1.0
 mypy==1.7.1
 
 # Optional: For enhanced performance
-orjson==3.9.15  # Faster JSON serialization
+orjson==3.11.6  # Faster JSON serialization
