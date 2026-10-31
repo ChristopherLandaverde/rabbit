@@ -115,3 +115,44 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "slow: Slow running tests")
     config.addinivalue_line("markers", "algorithm: Algorithm correctness tests")
     config.addinivalue_line("markers", "needs_redis: Requires a reachable Redis service")
+
+
+@pytest.fixture(autouse=True)
+def _restore_logging_state():
+    """Undo logger changes a test leaves behind.
+
+    Some tests (tests/unit/test_logging.py) attach Mock file handlers to the
+    module-level loggers; left in place, a later log call compares a real
+    level with a Mock and raises TypeError. Snapshot the root logger and every
+    named logger (handlers, level, propagate, disabled) and restore them.
+    """
+    import logging
+
+    def loggers():
+        named = [
+            logger for logger in logging.Logger.manager.loggerDict.values()
+            if isinstance(logger, logging.Logger)
+        ]
+        return [logging.getLogger(), *named]
+
+    saved = {
+        logger: (list(logger.handlers), logger.level, logger.propagate, logger.disabled)
+        for logger in loggers()
+    }
+    yield
+    for logger in loggers():
+        if logger in saved:
+            handlers, level, propagate, disabled = saved[logger]
+            logger.handlers[:] = handlers
+            logger.setLevel(level)
+            logger.propagate = propagate
+            logger.disabled = disabled
+        else:
+            # Created during the test: drop any handlers it added.
+            logger.handlers[:] = [h for h in logger.handlers if not _is_mock(h)]
+
+
+def _is_mock(value):
+    from unittest.mock import Mock
+
+    return isinstance(value, Mock)

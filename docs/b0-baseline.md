@@ -185,8 +185,15 @@ python -m pytest -q --ignore=tests/v2
 325 passed, 14 skipped, 52 xfailed
 
 python -m pytest -q tests/v2
-173 passed, 1 skipped, 1 error
+174 passed, 1 skipped, 1 error
+
+python -m pytest -q          # one process, also a CI job
+499 passed, 15 skipped, 52 xfailed, 1 error
 ```
+
+The single run used to fail: `tests/unit/test_logging.py` left Mock file
+handlers on module-level loggers, and a later log call raised `TypeError`.
+An autouse fixture in `conftest.py` now restores logger state after each test.
 
 The one error is `test_postgres_container_migration`, which needs Docker
 locally; CI runs it against its Postgres service.

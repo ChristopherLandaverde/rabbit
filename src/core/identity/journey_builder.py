@@ -1,6 +1,6 @@
 """Build customer journeys from resolved identities."""
 
-from typing import List, Dict
+from typing import Dict, List, Optional
 import pandas as pd
 from datetime import datetime
 from ...models.touchpoint import Touchpoint, CustomerJourney
@@ -67,8 +67,14 @@ class JourneyBuilder:
         
         return journeys
     
-    def _create_touchpoints(self, journey_df: pd.DataFrame) -> List[Touchpoint]:
-        """Convert DataFrame rows to Touchpoint objects."""
+    def _create_touchpoints(
+        self, journey_df: pd.DataFrame, errors: Optional[List[str]] = None
+    ) -> List[Touchpoint]:
+        """Convert DataFrame rows to Touchpoint objects.
+
+        Rows that cannot become a Touchpoint are skipped. Their reasons are
+        appended to ``errors`` when a list is given, otherwise printed.
+        """
         touchpoints = []
         
         for idx, row in journey_df.iterrows():
@@ -116,7 +122,11 @@ class JourneyBuilder:
                 )
                 touchpoints.append(touchpoint)
             except Exception as e:
-                print(f"Error creating touchpoint at index {idx}: {e}")
+                message = f"Error creating touchpoint at index {idx}: {e}"
+                if errors is None:
+                    print(message)
+                else:
+                    errors.append(message)
                 continue
         
         return touchpoints

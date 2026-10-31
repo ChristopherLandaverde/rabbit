@@ -16,6 +16,10 @@ jobs:
             test-command: python -m pytest -q --ignore=tests/v2
           - suite: v2
             test-command: python -m pytest -q tests/v2
+          # One process, as AGENTS.md runs it: catches state leaking between
+          # the v1 and v2 suites (e.g. logger handlers) that split runs miss.
+          - suite: full
+            test-command: python -m pytest -q
     name: pytest (${{ matrix.suite }})
     env:
       REDIS_HOST: 127.0.0.1
