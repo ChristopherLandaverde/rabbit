@@ -2,7 +2,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 import asyncio
 from unittest.mock import Mock
 
@@ -26,7 +26,7 @@ def client():
 @pytest.fixture
 async def async_client():
     """Create an async test client for the FastAPI app."""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 

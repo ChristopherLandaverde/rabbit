@@ -52,7 +52,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt -r requirements-test.txt
+        run: python -m pip install -r requirements.txt -r requirements-test.txt -r requirements-mcp.txt
       - name: Run pytest
         run: ${{ matrix.test-command }}
 

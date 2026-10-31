@@ -35,9 +35,12 @@ SDKs read `RABBIT_API_KEY` from env by default. Override per-call if needed.
 ### Idempotency
 Mutating endpoints (POST) accept `Idempotency-Key: <uuid>` header. Same key within 24h returns the original response. Required on `POST /v2/analyses` for production keys.
 
+**As implemented (M3c, #18).** `POST /v2/analyses` accepts `Idempotency-Key` (1 to 255 characters, otherwise 422 `invalid_idempotency_key`). The key is scoped to the API key and stored on the analysis under the `(key_id, idempotency_key)` unique index. Within 24 hours of the original request, a POST with the same key and the same body returns the original analysis (status 202, `Idempotent-Replayed: true`, current status) and creates nothing; the same key with a different body returns 409 `idempotency_key_in_use`. After 24 hours the key is released and admits a new analysis. The header is optional for every key: it is not yet required for live keys, and other POST endpoints ignore it.
+
 ### Rate limiting and quotas
 - Default: 60 requests/minute per key, sliding window
 - Per-key concurrency cap on analyses: **3 in-flight by default** — exceeding returns 429 with `error.type = "too_many_in_flight_analyses"`
+  - As implemented (#18): queued and running analyses count. The cap is `api_keys.max_concurrent_analyses` (default 3; set 1 to 100 with `max_concurrent_analyses` on `POST /v2/admin/keys`). The 429 problem has `code=too_many_in_flight_analyses` and `Retry-After: 10`. An idempotent replay is never capped.
 - Headers on every response:
   - `X-RateLimit-Limit`
   - `X-RateLimit-Remaining`
@@ -212,7 +215,7 @@ Run one or many attribution models against a dataset.
 
 `models` accepts 1-5 values. `options` is optional and only applies to relevant models.
 
-**As implemented (M3b, #17).** `webhook_id`, `Idempotency-Key` and `estimated_completion` are not built yet. The rest of the request is validated before anything is queued, and every failure is a 422 problem response:
+**As implemented (M3b, #17; M3c, #18).** `webhook_id` and `estimated_completion` are not built yet; `Idempotency-Key` is (see Idempotency above). The rest of the request is validated before anything is queued, and every failure is a 422 problem response:
 
 | Field | Rule | `code` on failure |
 |---|---|---|
@@ -332,6 +335,10 @@ List, with filters: `?dataset_id=...&status=succeeded`.
 
 #### `POST /v2/analyses/{id}/cancel`
 Cancel a queued or running analysis.
+
+**As implemented (#18).** Requires `analyses:write`. A queued or running analysis becomes `cancelled` with `completed_at` set, and the response is the analysis (200). A worker already computing it stops after the current model and does not write results. A finished analysis returns 409 `analysis_not_cancellable`; another key's analysis returns 404.
+
+**Janitor (T2, #18).** With v2 enabled, each API process runs a janitor every 60 seconds (`RABBIT_ANALYSIS_JANITOR=0` turns it off). It marks a running analysis `failed` with `error.code=worker_timeout` when `started_at` is more than `RABBIT_ANALYSIS_MAX_RUNTIME_MINUTES` (default 30) ago **and** `last_progress_at` is more than `RABBIT_ANALYSIS_STALE_PROGRESS_MINUTES` (default 5) ago. The worker heartbeats after each model, so a long analysis that is still progressing is left alone. Workers write results only while the analysis is still `running`, so a cancelled or timed-out analysis is never overwritten.
 
 ---
 

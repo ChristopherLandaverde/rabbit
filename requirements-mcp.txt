@@ -1,0 +1,3 @@
+# Optional: the local stdio MCP server (src/mcp_server, `python -m src.mcp_server`).
+# Install on top of requirements.txt. Exact pin; released 2026-09-07.
+mcp==1.30.0
