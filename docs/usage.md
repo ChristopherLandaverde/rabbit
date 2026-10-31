@@ -69,6 +69,8 @@ timestamp,channel,event_type,customer_id,conversion_value
 
 Rabbit links touchpoints into journeys using the best available identifier: `customer_id` when more than 80% of rows have one, otherwise `session_id` + `email`, otherwise `email` alone, otherwise all rows are treated as one aggregate journey (see `src/core/identity/resolver.py`). `test_data.csv` in the repo root is a complete example (3 customers, 10 touchpoints, 3 conversions, linked by `customer_id`).
 
+Identifier columns (`customer_id`, `session_id`, `campaign_id`, `creative_id`, `email`) are read as text, so numeric-looking ids such as `10423`, `00123` or a GA4 `user_pseudo_id` like `1234567890.1709280000` keep their exact value and every row. This holds for CSV and Parquet, and for JSON only when ids are quoted strings: an unquoted JSON number such as `1234567890.1709280000` is parsed as a float before Rabbit sees it, so digits can be lost. Rows that still cannot become a touchpoint are counted. The v1 response reports them in `metadata.rows_dropped`, including rows with no identifier when linking by `customer_id`. A v2 dataset upload lists rows the touchpoint schema rejects (for example a negative `conversion_value`) as a `rows_dropped` validation warning; it does not run identity resolution at upload.
+
 ## Install with pip instead of uv
 
 ```bash

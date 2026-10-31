@@ -240,7 +240,8 @@ class AttributionService:
             time_range_start=time_range_start,
             time_range_end=time_range_end,
             linking_method=str(linking_method),
-            processing_time_ms=processing_time_ms
+            processing_time_ms=processing_time_ms,
+            rows_dropped=max(0, len(df) - sum(len(j.touchpoints) for j in journeys)),
         )
     
     def _generate_business_insights(
