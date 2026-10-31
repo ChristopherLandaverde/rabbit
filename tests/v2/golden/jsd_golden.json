@@ -1,0 +1,95 @@
+{
+  "description": "Hand-computed Jensen-Shannon divergence (log base 2, so JSD is in [0, 1]) and model_agreement_score cases for SPEC_v2 section 7. JSD(P, Q) = 0.5 * KL(P || M) + 0.5 * KL(Q || M), M = 0.5 * (P + Q), with 0 * log(0) = 0. A channel missing from a distribution has credit 0. Each value was worked by hand (see its derivation) before the implementation existed; tests compare with an absolute tolerance of 1e-12.",
+  "jsd_cases": [
+    {
+      "name": "identical",
+      "p": {"email": 0.5, "social": 0.3, "organic": 0.2},
+      "q": {"email": 0.5, "social": 0.3, "organic": 0.2},
+      "jsd": 0.0,
+      "derivation": "P = Q, so M = P and every term is p * log2(p / p) = 0. JSD = 0."
+    },
+    {
+      "name": "fully_disjoint_single_channel",
+      "p": {"email": 1.0},
+      "q": {"social": 1.0},
+      "jsd": 1.0,
+      "derivation": "M = {email: 0.5, social: 0.5}. KL(P||M) = 1 * log2(1 / 0.5) = 1; KL(Q||M) = 1 by symmetry. JSD = 0.5 * 1 + 0.5 * 1 = 1."
+    },
+    {
+      "name": "fully_disjoint_multi_channel",
+      "p": {"email": 0.5, "social": 0.5},
+      "q": {"organic": 0.25, "paid_search": 0.75},
+      "jsd": 1.0,
+      "derivation": "Supports do not overlap, so M = P/2 on P's channels and Q/2 on Q's. KL(P||M) = sum p * log2(p / (p/2)) = sum p * 1 = 1; likewise KL(Q||M) = 1. JSD = 1. Any two disjoint distributions reach the base-2 maximum of 1."
+    },
+    {
+      "name": "partial_overlap_one_shared_channel",
+      "p": {"email": 0.5, "social": 0.5},
+      "q": {"social": 0.5, "organic": 0.5},
+      "jsd": 0.5,
+      "derivation": "M = {email: 0.25, social: 0.5, organic: 0.25}. KL(P||M) = 0.5 * log2(0.5/0.25) + 0.5 * log2(0.5/0.5) = 0.5 * 1 + 0.5 * 0 = 0.5. KL(Q||M) = 0.5 by symmetry. JSD = 0.5 * 0.5 + 0.5 * 0.5 = 0.5."
+    },
+    {
+      "name": "partial_overlap_subset",
+      "p": {"email": 0.5, "social": 0.5},
+      "q": {"email": 1.0},
+      "jsd": 0.31127812445913294,
+      "derivation": "M = {email: 0.75, social: 0.25}. KL(P||M) = 0.5 * log2(0.5/0.75) + 0.5 * log2(0.5/0.25) = 0.5 * (1 - log2 3) + 0.5 = 1 - 0.5 * log2 3. KL(Q||M) = 1 * log2(1/0.75) = 2 - log2 3. JSD = 0.5 * (3 - 1.5 * log2 3) = 1.5 - 0.75 * log2 3 = 1.5 - 0.75 * 1.584962500721156 = 0.311278124459133."
+    },
+    {
+      "name": "explicit_zero_equals_missing_channel",
+      "p": {"email": 0.5, "social": 0.5, "organic": 0.0},
+      "q": {"social": 0.5, "organic": 0.5},
+      "jsd": 0.5,
+      "derivation": "Same distributions as partial_overlap_one_shared_channel: an explicit 0 credit and an absent channel are the same point on the simplex, and 0 * log2(0 / m) = 0. JSD = 0.5."
+    },
+    {
+      "name": "unnormalized_weights_are_normalized_first",
+      "p": {"email": 2.0, "social": 2.0},
+      "q": {"social": 1.0, "organic": 1.0},
+      "jsd": 0.5,
+      "derivation": "Dividing each by its total gives P = {email: 0.5, social: 0.5} and Q = {social: 0.5, organic: 0.5}, the partial_overlap_one_shared_channel case. JSD = 0.5."
+    }
+  ],
+  "agreement_cases": [
+    {
+      "name": "two_identical_models",
+      "distributions": [{"email": 0.6, "social": 0.4}, {"email": 0.6, "social": 0.4}],
+      "mean_pairwise_jsd": 0.0,
+      "model_agreement_score": 1.0,
+      "derivation": "One pair, JSD = 0. Agreement = 1 - 0 = 1."
+    },
+    {
+      "name": "two_disjoint_models",
+      "distributions": [{"email": 1.0}, {"social": 1.0}],
+      "mean_pairwise_jsd": 1.0,
+      "model_agreement_score": 0.0,
+      "derivation": "One pair, JSD = 1. Agreement = 1 - 1 = 0."
+    },
+    {
+      "name": "three_models_two_agree",
+      "distributions": [{"email": 1.0}, {"email": 1.0}, {"social": 1.0}],
+      "mean_pairwise_jsd": 0.6666666666666666,
+      "model_agreement_score": 0.33333333333333337,
+      "derivation": "3 * 2 / 2 = 3 pairs: (1,2) identical = 0, (1,3) disjoint = 1, (2,3) disjoint = 1. Mean = 2/3. Agreement = 1 - 2/3 = 1/3."
+    },
+    {
+      "name": "three_models_partial_overlap",
+      "distributions": [
+        {"email": 0.5, "social": 0.5},
+        {"social": 0.5, "organic": 0.5},
+        {"email": 0.5, "social": 0.5}
+      ],
+      "mean_pairwise_jsd": 0.3333333333333333,
+      "model_agreement_score": 0.6666666666666667,
+      "derivation": "Pairs: (1,2) = 0.5 (partial_overlap_one_shared_channel), (1,3) identical = 0, (2,3) = 0.5. Mean = 1/3. Agreement = 1 - 1/3 = 2/3."
+    }
+  ],
+  "recorded_cases": {
+    "test_data_csv_five_models": {
+      "models": ["linear", "time_decay", "first_touch", "last_touch", "position_based"],
+      "model_agreement_score": 0.8831995521084659,
+      "derivation": "Recorded regression value, not hand-computed: the time_decay credits are irrational. Computed from the default-parameter credits of all five models on test_data.csv (credits unchanged from v1 and docs/b0-baseline.md) over 10 pairs, and cross-checked independently as 1 - mean(scipy.spatial.distance.jensenshannon(p, q, base=2) ** 2) = 0.883199552108466 (difference 1.1e-16; scipy returns the distance, so it is squared)."
+    }
+  }
+}

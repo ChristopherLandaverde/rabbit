@@ -87,6 +87,24 @@ python -m pytest -q tests/v2
 With Redis unavailable, the v1 command produces
 `325 passed, 14 skipped, 52 xfailed`; the 14 skips are all `needs Redis`.
 
+### Multi-model analyses and comparison (#17, M3b)
+
+M3b adds v2 code only (`src/v2/comparison.py`, `src/v2/analyses.py`); no v1
+module or attribution model changed, and the v2 tests assert each model's
+credits on `test_data.csv` still equal the v1 `/attribution/analyze` output.
+With Redis 7 and Postgres 16 running:
+
+```text
+python -m pytest -q --ignore=tests/v2
+338 passed, 53 xfailed, 156502 warnings
+
+python -m pytest -q tests/v2
+92 passed, 66 warnings
+```
+
+The v1 result is identical to the line above. The 43 new v2 tests include the
+hand-computed Jensen-Shannon golden file `tests/v2/golden/jsd_golden.json`.
+
 Baseline collection errors represented in `tests/known_failures.txt`:
 
 | Test group | Count | Reason |

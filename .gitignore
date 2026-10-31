@@ -159,6 +159,7 @@ Thumbs.db
 !**/package-lock.json
 !**/tsconfig*.json
 !**/.eslintrc.json
+!tests/v2/golden/*.json
 data/
 logs/
 temp/

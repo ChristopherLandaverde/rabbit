@@ -1,20 +1,22 @@
-"""Single-model async attribution analyses (#16).
+"""Async attribution analyses: one to five models per request (#16, #17).
 
-An analysis applies one named, rule-based attribution model to a ready dataset.
-The credits it returns describe how conversions are distributed across channels
-under that model's rule. They are associations, not measured causal impact.
+An analysis applies one or more named, rule-based attribution models to a ready
+dataset. The credits each returns describe how conversions are distributed
+across channels under that model's rule. They are associations, not measured
+causal impact. With two or more models the analysis also carries a thin
+comparison block (see src/v2/comparison.py and SPEC_v2 section 7).
 """
 
 import asyncio
 import base64
 import logging
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,30 +25,41 @@ from ulid import ULID
 from ..core.attribution.factory import AttributionModelFactory
 from ..core.attribution_service import AttributionService
 from ..core.identity.resolver import IdentityResolver, select_linking_method
+from ..core.journey_analysis import JourneyAnalyzer
 from ..core.validation.validators import validate_data_quality
 from ..db.models import Analysis, Dataset
 from ..db.session import get_session
 from ..models.enums import AttributionModelType
 from .auth.dependencies import require_api_key, require_scope
 from .auth.errors import ApiProblem
+from .comparison import build_comparison
 from .datasets import _read_frame, get_storage
 
 router = APIRouter(tags=["Analyses"])
 logger = logging.getLogger(__name__)
 
 MAX_ANALYSIS_TOUCHPOINTS = 250_000
-MAX_MODELS_PER_ANALYSIS = 1
+MAX_MODELS_PER_ANALYSIS = 5
 ANALYSIS_STATUSES = ("queued", "running", "succeeded", "failed", "cancelled")
 DOCS = "https://docs.rabbit.example/analyses"
-SUPPORTED_OPTIONS = {"time_decay_half_life_days", "position_based_weights"}
+SUPPORTED_OPTIONS = {
+    "time_decay_half_life_days", "position_based_weights", "conversion_window_days",
+}
+INCLUDABLE = {"journey"}
+# Sanity bound (10 years) so a huge value is a 422, not a timedelta overflow in the worker.
+MAX_CONVERSION_WINDOW_DAYS = 3650
 
 INTERPRETATION_TYPE = "association"
 ANALYSIS_DESCRIPTION = (
-    "Queue one rule-based attribution model (first_touch, last_touch, linear, "
-    "time_decay or position_based) against a ready dataset, then poll "
+    "Queue one to five rule-based attribution models (first_touch, last_touch, "
+    "linear, time_decay, position_based) against a ready dataset, then poll "
     "GET /v2/analyses/{id}. Each channel's credit is its share of conversions "
     "under the named model's rule, an association: it is not causal impact or "
-    "incrementality and does not say what would happen if spend changed."
+    "incrementality and does not say what would happen if spend changed. With "
+    "two or more models, the comparison block shows each channel's credit by "
+    "model and a model_agreement_score (1 - mean pairwise Jensen-Shannon "
+    "divergence, base 2); agreement between models is not evidence that any "
+    "model is correct."
 )
 
 
@@ -58,14 +71,17 @@ class AnalysisCreate(BaseModel):
 
 def _interpretation(models: list[str]) -> dict[str, str]:
     names = ", ".join(models)
-    return {
-        "type": INTERPRETATION_TYPE,
-        "statement": (
-            f"Credits show how conversions are shared across channels under the "
-            f"named model ({names}) and its parameters. They describe an "
-            f"association in this dataset, not causal effect or incrementality."
-        ),
-    }
+    statement = (
+        f"Credits show how conversions are shared across channels under each "
+        f"named model ({names}) and its parameters. They describe an "
+        f"association in this dataset, not causal effect or incrementality."
+    )
+    if len(models) > 1:
+        statement += (
+            " The comparison shows how far these models' credit splits agree; "
+            "agreement between models is not evidence that any of them is correct."
+        )
+    return {"type": INTERPRETATION_TYPE, "statement": statement}
 
 
 def _invalid(code: str, detail: str, fix_hint: str, status: int = 422) -> ApiProblem:
@@ -84,7 +100,7 @@ def resolve_parameters(model: str, options: dict[str, Any] | None) -> dict[str, 
         raise _invalid(
             "validation_failed",
             f"Unsupported option(s): {', '.join(unknown)}.",
-            "Use time_decay_half_life_days or position_based_weights.",
+            "Use time_decay_half_life_days, position_based_weights or conversion_window_days.",
         )
     half_life = options.get("time_decay_half_life_days", 7.0)
     if not _number(half_life) or half_life <= 0:
@@ -108,6 +124,17 @@ def resolve_parameters(model: str, options: dict[str, Any] | None) -> dict[str, 
             "position_based_weights.first and .last must be between 0 and 1 and sum to at most 1.",
             "Choose first and last weights whose sum is 1 or less.",
         )
+    window = options.get("conversion_window_days")
+    if window is not None and not (
+        _number(window) and 1 <= window <= MAX_CONVERSION_WINDOW_DAYS
+        and float(window).is_integer()
+    ):
+        raise _invalid(
+            "validation_failed",
+            "options.conversion_window_days must be a whole number of days from 1 to "
+            f"{MAX_CONVERSION_WINDOW_DAYS}.",
+            "Set conversion_window_days to e.g. 30, or omit it to use every touchpoint.",
+        )
     middle = 1.0 - first - last
     if "middle" in weights and (not _number(weights["middle"])
                                 or abs(weights["middle"] - middle) > 1e-9):
@@ -116,15 +143,50 @@ def resolve_parameters(model: str, options: dict[str, Any] | None) -> dict[str, 
             "position_based_weights.middle must equal 1 - first - last.",
             "Omit middle; it is derived from first and last.",
         )
+    parameters: dict[str, float] = {}
     if model == AttributionModelType.TIME_DECAY.value:
-        return {"half_life_days": float(half_life)}
-    if model == AttributionModelType.POSITION_BASED.value:
-        return {
+        parameters = {"half_life_days": float(half_life)}
+    elif model == AttributionModelType.POSITION_BASED.value:
+        parameters = {
             "first_touch_weight": float(first),
             "last_touch_weight": float(last),
             "middle_touch_weight": middle,
         }
-    return {}
+    if window is not None:
+        parameters["conversion_window_days"] = int(window)
+    return parameters
+
+
+# Parameters recorded on a result that are not constructor arguments of the model.
+NON_MODEL_PARAMETERS = {"middle_touch_weight", "conversion_window_days"}
+
+
+def apply_conversion_window(journeys, days: int, conversion_events):
+    """Drop touchpoints more than ``days`` before the journey's last conversion.
+
+    The lookback window decides which touchpoints are eligible for credit
+    (GA4's "key event lookback window"). v1 models credit a whole journey as
+    one path, so the window is anchored at the journey's last conversion event.
+    Conversion events themselves are always kept, so conversion and revenue
+    totals do not change; touchpoints after that conversion are left as v1
+    treats them. Journeys without a conversion are returned unchanged.
+    """
+    window = timedelta(days=days)
+    windowed = []
+    for journey in journeys:
+        conversions = [
+            tp.timestamp for tp in journey.touchpoints if tp.event_type in conversion_events
+        ]
+        if not conversions:
+            windowed.append(journey)
+            continue
+        start = max(conversions) - window
+        kept = [
+            tp for tp in journey.touchpoints
+            if tp.event_type in conversion_events or tp.timestamp >= start
+        ]
+        windowed.append(journey.model_copy(update={"touchpoints": kept}))
+    return windowed
 
 
 def compute_model_result(frame: pd.DataFrame, model: str, parameters: dict[str, float]):
@@ -144,7 +206,13 @@ def compute_model_result(frame: pd.DataFrame, model: str, parameters: dict[str, 
     linking_method = select_linking_method(frame)
     identity_map = IdentityResolver(linking_method).resolve_identities(frame)
     journeys = service.journey_builder.build_journeys(frame, identity_map)
-    model_kwargs = {k: v for k, v in parameters.items() if k != "middle_touch_weight"}
+    if "conversion_window_days" in parameters:
+        journeys = apply_conversion_window(
+            journeys,
+            parameters["conversion_window_days"],
+            service.journey_builder.conversion_events,
+        )
+    model_kwargs = {k: v for k, v in parameters.items() if k not in NON_MODEL_PARAMETERS}
     attribution_model = AttributionModelFactory.create_model(
         AttributionModelType(model), **model_kwargs
     )
@@ -173,6 +241,47 @@ def compute_model_result(frame: pd.DataFrame, model: str, parameters: dict[str, 
         },
     }
     return summary, result
+
+
+def compute_journey_block(frame: pd.DataFrame) -> dict | None:
+    """Descriptive journey statistics from the v1 JourneyAnalyzer (C5).
+
+    The analyzer's ``insights`` strings are dropped: they are fixed-rule advice
+    ("strong immediate impact") that reads as a causal claim. Returns None when
+    the dataset has no customer_id column, which the analyzer groups by.
+    """
+    frame = frame.copy()
+    frame.columns = frame.columns.str.lower()
+    if "customer_id" not in frame.columns:
+        return None
+    if "timestamp" in frame.columns:
+        frame["timestamp"] = pd.to_datetime(frame["timestamp"])
+    analyzer = JourneyAnalyzer()
+    lengths = analyzer.analyze_journey_lengths(frame)
+    paths = analyzer.analyze_conversion_paths(frame)
+    timing = analyzer.analyze_time_to_conversion(frame)
+    return {
+        "journey_lengths": {
+            "average_length": lengths["average_length"],
+            "median_length": lengths["median_length"],
+            "length_distribution": lengths["length_distribution"],
+        },
+        "conversion_paths": {
+            "top_paths": paths["top_paths"],
+            # The analyzer calls this conversion_rate_by_path, but it counts
+            # converting customers in the top paths, by path length.
+            "top_path_conversions_by_length": {
+                str(length): count
+                for length, count in paths["conversion_rate_by_path"].items()
+            },
+        },
+        "time_to_conversion": {
+            "unit": "whole_days",
+            "average": timing["average_time_to_conversion"],
+            "median": timing["median_time_to_conversion"],
+            "time_distribution": timing["time_distribution"],
+        },
+    }
 
 
 async def claim_next_analysis(session_factory) -> str | None:
@@ -220,7 +329,13 @@ async def execute_analysis(analysis_id: str, session_factory, storage) -> None:
                 }
                 analysis.last_progress_at = datetime.now(timezone.utc)
                 await session.commit()
-            analysis.results = {"summary": summary, "models": models}
+            try:
+                journey = await asyncio.to_thread(compute_journey_block, frame)
+            except Exception:
+                logger.exception("Journey block failed for analysis %s", analysis_id)
+                journey = None
+            analysis.comparison = build_comparison(analysis.models, models)
+            analysis.results = {"summary": summary, "models": models, "journey": journey}
             analysis.status = "succeeded"
         except Exception as exc:
             await session.rollback()
@@ -265,7 +380,10 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
-def _analysis_response(analysis: Analysis, livemode: bool, include_results: bool = True):
+def _analysis_response(
+    analysis: Analysis, livemode: bool, include_results: bool = True,
+    include: frozenset[str] = frozenset(),
+):
     body = {
         "id": analysis.id,
         "object": "analysis",
@@ -285,6 +403,9 @@ def _analysis_response(analysis: Analysis, livemode: bool, include_results: bool
         results = analysis.results or {}
         body["summary"] = results.get("summary")
         body["results"] = results.get("models")
+        body["comparison"] = analysis.comparison
+        if "journey" in include:
+            body["journey"] = results.get("journey")
     return body
 
 
@@ -295,7 +416,7 @@ def _not_found(detail="No analysis has that id.") -> ApiProblem:
 @router.post(
     "/analyses",
     status_code=202,
-    summary="Run one attribution model on a dataset",
+    summary="Run one to five attribution models on a dataset",
     description=ANALYSIS_DESCRIPTION,
     dependencies=[Depends(require_scope("analyses:write"))],
 )
@@ -307,7 +428,15 @@ async def create_analysis(
     session: AsyncSession = Depends(get_session),
 ):
     if not payload.models:
-        raise _invalid("validation_failed", "models must name one model.", 'Send "models": ["linear"].')
+        raise _invalid(
+            "validation_failed", "models must name 1 to 5 models.", 'Send "models": ["linear"].'
+        )
+    if len(payload.models) > MAX_MODELS_PER_ANALYSIS:
+        raise _invalid(
+            "too_many_models",
+            f"An analysis runs at most {MAX_MODELS_PER_ANALYSIS} models; got {len(payload.models)}.",
+            "Name each model once; there are five registered models.",
+        )
     valid = [model.value for model in AttributionModelType]
     unknown = [model for model in payload.models if model not in valid]
     if unknown:
@@ -316,11 +445,12 @@ async def create_analysis(
             f"Unknown model(s): {', '.join(unknown)}. Registered models: {', '.join(valid)}.",
             "Choose one of the registered models.",
         )
-    if len(payload.models) > MAX_MODELS_PER_ANALYSIS:
+    repeated = sorted({model for model in payload.models if payload.models.count(model) > 1})
+    if repeated:
         raise _invalid(
-            "too_many_models",
-            "An analysis currently runs exactly one model.",
-            "Submit one analysis per model.",
+            "validation_failed",
+            f"models must not repeat: {', '.join(repeated)}.",
+            "List each model once.",
         )
     parameters = {model: resolve_parameters(model, payload.options) for model in payload.models}
 
@@ -380,14 +510,24 @@ async def create_analysis(
 
 @router.get(
     "/analyses/{analysis_id}",
-    summary="Get an analysis and, once succeeded, its model results",
+    summary="Get an analysis and, once succeeded, its results and comparison",
     dependencies=[Depends(require_scope("analyses:read"))],
 )
 async def get_analysis(
     analysis_id: str,
+    include: str | None = Query(
+        None, description="Comma-separated optional blocks; 'journey' adds journey statistics."
+    ),
     key=Depends(require_api_key),
     session: AsyncSession = Depends(get_session),
 ):
+    requested = frozenset(part.strip() for part in (include or "").split(",") if part.strip())
+    if requested - INCLUDABLE:
+        raise _invalid(
+            "validation_failed",
+            f"Unknown include value(s): {', '.join(sorted(requested - INCLUDABLE))}.",
+            "Use include=journey or omit include.",
+        )
     analysis = (
         await session.execute(
             select(Analysis).where(Analysis.id == analysis_id, Analysis.key_id == key.id)
@@ -395,7 +535,7 @@ async def get_analysis(
     ).scalar_one_or_none()
     if analysis is None:
         raise _not_found()
-    return _analysis_response(analysis, key.livemode)
+    return _analysis_response(analysis, key.livemode, include=requested)
 
 
 def _bad_cursor(detail: str) -> ApiProblem:
