@@ -23,7 +23,7 @@ from .v2.auth.errors import ApiProblem, problem_content, problem
 from .v2.auth.admin import admin_router
 from .v2.auth.signup import signup_router
 from .v2.datasets import router as datasets_router
-from .v2.analyses import router as analyses_router, run_worker
+from .v2.analyses import router as analyses_router, run_janitor, run_worker
 from .v2.datasets import get_storage
 from .v2.sample_dataset import router as sample_dataset_router
 from .v2.auth.service import authenticate
@@ -52,12 +52,24 @@ async def lifespan(app: FastAPI):
         worker = asyncio.create_task(
             run_worker(async_session_factory, get_storage(), stop=worker_stop)
         )
+    janitor = None
+    if settings.rabbit_v2_enabled and os.getenv("RABBIT_ANALYSIS_JANITOR", "1") != "0":
+        # Fails analyses whose worker died mid-run (#18). Safe to run in every
+        # replica: each write re-checks that the analysis is still stuck.
+        janitor = asyncio.create_task(
+            run_janitor(
+                getattr(app.state, "api_session_factory", async_session_factory),
+                stop=worker_stop,
+            )
+        )
     try:
         yield
     finally:
+        worker_stop.set()
         if worker is not None:
-            worker_stop.set()
             await worker
+        if janitor is not None:
+            await janitor
         await app.state.redis.aclose()
         await engine.dispose()
     print("Shutting down application")
@@ -81,6 +93,7 @@ def create_app() -> FastAPI:
             status_code=exc.status,
             media_type="application/problem+json",
             content=problem_content(exc.status, exc.code, exc.title, exc.detail, exc.fix_hint, exc.doc_url),
+            headers=exc.headers or None,
         )
     
     # Add security middleware

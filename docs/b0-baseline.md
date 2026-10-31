@@ -173,3 +173,20 @@ with the default 7-day half-life, a touchpoint 3 hours before conversion keeps
 `half_life_days` to see a larger recency effect on short journeys. The four
 other models are byte-for-byte unchanged and remain the regression reference.
 
+
+### M3c: idempotency, concurrency cap, janitor (#18)
+
+No attribution math changed. `tests/v2/test_m3c.py` adds 27 tests, including a
+check that all five models' credits on `test_data.csv` equal the raw outputs
+above, normalized to shares. Local run on Python 3.12 without Docker:
+
+```text
+python -m pytest -q --ignore=tests/v2
+325 passed, 14 skipped, 52 xfailed
+
+python -m pytest -q tests/v2
+173 passed, 1 skipped, 1 error
+```
+
+The one error is `test_postgres_container_migration`, which needs Docker
+locally; CI runs it against its Postgres service.
