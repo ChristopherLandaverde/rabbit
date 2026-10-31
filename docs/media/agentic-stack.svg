@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="548" viewBox="0 0 880 548" role="img" aria-labelledby="t d">
+  <title id="t">Rabbit agentic stack</title>
+  <desc id="d">Four stacked layers. Bottom, layer 1, the engine: five rule-based attribution models plus the Jensen-Shannon multi-model comparison, at L0, with L1 pending issue 69. Layer 2, tools: the v2 API, the GA4 BigQuery importer CLI and the rabbit-mcp server with import_ga4, run_models, compare_models and dataset_quality, at L2. Layer 3, your agent: Claude, Cursor or any MCP client, at L3 live read, fixture-verified. Top, layer 4, you approve: nothing writes to your accounts; credits under a named model are evidence for you to act on; L4 not built.</desc>
+  <!-- Focosys brand: paper #F3F0E6, raised #EBE8DE, ink #10231F, muted #426B5D, lime #D7FF69 (fill only) -->
+  <style>
+    .sans { font-family: 'DM Sans', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; }
+    .mono { font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+
+  <!-- Solid paper tile so it reads on GitHub light and dark -->
+  <rect x="0" y="0" width="880" height="548" rx="20" fill="#F3F0E6"/>
+  <rect x="0.75" y="0.75" width="878.5" height="546.5" rx="19.5" fill="none" stroke="#10231F" stroke-opacity="0.22" stroke-width="1.5"/>
+
+  <!-- Header -->
+  <text x="32" y="44" class="mono" font-size="13" font-weight="600" letter-spacing="1.2" fill="#426B5D">RABBIT · AGENTIC STACK</text>
+  <text x="848" y="44" class="mono" font-size="13" fill="#426B5D" text-anchor="end">read top to bottom: who asks → what runs</text>
+
+  <!-- Layer 4: You approve -->
+  <rect x="24" y="64" width="832" height="100" rx="12" fill="#F3F0E6" stroke="#10231F" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="48" y="92" class="mono" font-size="12" font-weight="600" letter-spacing="1" fill="#426B5D">4 · YOU APPROVE</text>
+  <text x="48" y="122" class="sans" font-size="18" font-weight="600" fill="#10231F">Nothing writes to your accounts.</text>
+  <text x="48" y="146" class="sans" font-size="15" fill="#10231F">Credits under a named model are evidence for you to act on.</text>
+  <rect x="644" y="80" width="188" height="28" rx="14" fill="none" stroke="#426B5D" stroke-width="1.5"/>
+  <text x="738" y="99" class="mono" font-size="12.5" font-weight="600" fill="#426B5D" text-anchor="middle">L4 not built</text>
+
+  <!-- Layer 3: Your agent -->
+  <rect x="24" y="176" width="832" height="100" rx="12" fill="#EBE8DE" stroke="#10231F" stroke-opacity="0.22" stroke-width="1.5"/>
+  <text x="48" y="204" class="mono" font-size="12" font-weight="600" letter-spacing="1" fill="#426B5D">3 · YOUR AGENT</text>
+  <text x="48" y="234" class="sans" font-size="18" font-weight="600" fill="#10231F">Claude, Cursor, any MCP client</text>
+  <text x="48" y="258" class="sans" font-size="15" fill="#10231F">Picks the tools and explains results; quotes every number from a tool.</text>
+  <rect x="644" y="192" width="188" height="28" rx="14" fill="#D7FF69"/>
+  <text x="738" y="211" class="mono" font-size="12.5" font-weight="600" fill="#10231F" text-anchor="middle">L3 live read</text>
+  <text x="832" y="240" class="mono" font-size="12" fill="#426B5D" text-anchor="end">fixture-verified</text>
+
+  <!-- Layer 2: Tools -->
+  <rect x="24" y="288" width="832" height="116" rx="12" fill="#EBE8DE" stroke="#10231F" stroke-opacity="0.22" stroke-width="1.5"/>
+  <text x="48" y="316" class="mono" font-size="12" font-weight="600" letter-spacing="1" fill="#426B5D">2 · TOOLS</text>
+  <text x="48" y="346" class="sans" font-size="18" font-weight="600" fill="#10231F">rabbit-mcp · v2 API · GA4 BigQuery importer</text>
+  <text x="48" y="370" class="mono" font-size="13.5" fill="#10231F">import_ga4 · run_models · compare_models · dataset_quality</text>
+  <text x="48" y="392" class="mono" font-size="12.5" fill="#426B5D">python -m src.mcp_server · python -m src.importers.ga4_bigquery</text>
+  <rect x="644" y="304" width="188" height="28" rx="14" fill="#D7FF69"/>
+  <text x="738" y="323" class="mono" font-size="12.5" font-weight="600" fill="#10231F" text-anchor="middle">L2 agent-callable</text>
+
+  <!-- Layer 1: Engine (foundation, ink) -->
+  <rect x="24" y="416" width="832" height="108" rx="12" fill="#10231F"/>
+  <text x="48" y="444" class="mono" font-size="12" font-weight="600" letter-spacing="1" fill="#D7FF69">1 · ENGINE</text>
+  <text x="48" y="474" class="sans" font-size="18" font-weight="600" fill="#F3F0E6">5 attribution models + JSD multi-model comparison</text>
+  <text x="48" y="500" class="mono" font-size="12.5" fill="#F3F0E6">first_touch · last_touch · linear · time_decay · position_based</text>
+  <rect x="644" y="432" width="188" height="28" rx="14" fill="none" stroke="#D7FF69" stroke-width="1.5"/>
+  <text x="738" y="451" class="mono" font-size="12.5" font-weight="600" fill="#D7FF69" text-anchor="middle">L0 · L1 pending #69</text>
+</svg>
