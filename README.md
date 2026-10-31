@@ -103,7 +103,7 @@ If your GA4 property exports to BigQuery, Rabbit can read the export directly in
 
 ```bash
 python -m src.importers.ga4_bigquery --project my-gcp-project --dataset analytics_123456789 \
-  --start 20240301 --end 20240315 --conversion-event purchase --out ga4_touchpoints.csv
+  --start 20250301 --end 20250315 --conversion-event purchase --out ga4_touchpoints.csv
 ```
 
 - **Credentials** come from Application Default Credentials on the machine that runs the importer (`gcloud auth application-default login`, or `GOOGLE_APPLICATION_CREDENTIALS`). Rabbit never takes Google credentials in an HTTP request, and never stores or logs them. There is no API endpoint for this yet; it runs as a local CLI or Python function (`import_ga4`).
@@ -117,7 +117,7 @@ Output from `python scripts/ga4_fixture_demo.py`, which runs the same CLI on the
 ```text
 Dry run: this query will process 50.00 MiB (52428800 bytes) from 5 daily tables; limit --max-bytes 10.00 GiB. On-demand billing charges at least 10 MB per table (50.00 MiB here).
 Read 16 export rows: 12 session_start touchpoints and 4 'purchase' conversions for 6 customers; 0 rows skipped with no user id (e.g. consent-denied traffic).
-Channel source: 4 UTM tags, 2 gclid (google / cpc), 7 GA4 last non-direct click, 1 event params (pre-2024 export), 2 direct.
+Channel source: 5 UTM tags, 2 gclid (google / cpc), 7 GA4 last non-direct click, 0 event params (exported before July 2024), 2 direct.
 Untagged sessions take GA4's last non-direct session source, as in GA4's session source/medium, so direct is undercounted and a returning visitor's earlier source can repeat as a touch.
 Wrote 16 touchpoints to ga4_touchpoints.csv.
 Run any model on this file; its credits describe association under the named model, not causal impact.
@@ -133,7 +133,7 @@ time_decay     {"google / cpc":26,"newsletter / email":38,"google / organic":25,
 position_based {"google / cpc":23,"newsletter / email":40,"google / organic":25,"direct":10,"facebook / social":2}
 ```
 
-The field mapping, exit codes and limits (time zones, journeys cut at `--start`, the last ~72 hours still changing, consent-denied traffic) are in [docs/importers/ga4-bigquery.md](docs/importers/ga4-bigquery.md).
+The field mapping, exit codes and limits (time zones, journeys cut at `--start`, the last ~72 hours still changing, consent-denied traffic, ranges that cross July 2024) are in [docs/importers/ga4-bigquery.md](docs/importers/ga4-bigquery.md).
 
 ## Known limits
 

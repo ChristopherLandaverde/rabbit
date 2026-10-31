@@ -22,7 +22,7 @@ from google.cloud.bigquery.table import Row
 FIXTURE_DIR = Path(__file__).resolve().parent / "ga4"
 EVENTS_ROWS = FIXTURE_DIR / "events_rows.json"
 EQUIVALENT_CSV = FIXTURE_DIR / "equivalent_touchpoints.csv"
-FIXTURE_DAYS = ("20240301", "20240302", "20240303", "20240308", "20240315")
+FIXTURE_DAYS = ("20250301", "20250302", "20250303", "20250308", "20250315")
 
 # Top-level columns of a current GA4 export daily table (subset is enough).
 EXPORT_COLUMNS = [
@@ -93,10 +93,10 @@ class FakeBigQueryClient:
         self.schema_reads = []
 
     def list_tables(self, dataset_ref):
-        base = datetime(2024, 3, 1, 9, tzinfo=timezone.utc)
+        base = datetime(2025, 3, 1, 9, tzinfo=timezone.utc)
         tables = [_Table(f"events_{day}", base + timedelta(days=i)) for i, day in enumerate(self.days)]
         tables.append(_Table(f"events_intraday_{self.days[-1]}", base + timedelta(days=60)))
-        tables.append(_Table("pseudonymous_users_20240301", base + timedelta(days=90)))
+        tables.append(_Table("pseudonymous_users_20250301", base + timedelta(days=90)))
         return tables
 
     def get_table(self, table_ref):

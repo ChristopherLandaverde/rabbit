@@ -17,6 +17,7 @@ from ulid import ULID
 
 from ..core.validation.validators import validate_data_types, validate_required_columns
 from ..db.models import Dataset
+from ..utils.touchpoint_frames import read_touchpoint_frame
 from ..db.session import get_session
 from .auth.dependencies import require_api_key, require_scope
 from .auth.errors import ApiProblem
@@ -55,14 +56,8 @@ def get_storage():
 
 
 def _read_frame(content: bytes, extension: str) -> pd.DataFrame:
-    if extension == "csv":
-        return pd.read_csv(io.BytesIO(content))
-    if extension == "json":
-        try:
-            return pd.read_json(io.BytesIO(content), lines=True)
-        except ValueError:
-            return pd.read_json(io.BytesIO(content))
-    return pd.read_parquet(io.BytesIO(content))
+    # Identifier columns stay text so numeric-looking ids keep every row (#66).
+    return read_touchpoint_frame(content, extension)
 
 
 def _validation_report(
@@ -93,6 +88,41 @@ def _validation_report(
             )
         )
     return ValidationReport(errors=issues)
+
+
+def _dropped_row_warnings(frame: pd.DataFrame) -> list[ValidationIssue]:
+    """Warn when rows will not become touchpoints in an analysis (#66).
+
+    Builds touchpoints the way analyses do and reports how many rows fall out
+    and the first reason, so data loss is visible at upload time.
+    """
+    from contextlib import redirect_stdout
+
+    from ..core.identity.journey_builder import JourneyBuilder
+
+    normalized = frame.copy()
+    normalized.columns = normalized.columns.str.lower()
+    if "timestamp" in normalized.columns:
+        normalized["timestamp"] = pd.to_datetime(normalized["timestamp"], errors="coerce")
+    log = io.StringIO()
+    with redirect_stdout(log):
+        built = JourneyBuilder()._create_touchpoints(normalized)
+    dropped = len(normalized) - len(built)
+    if dropped <= 0:
+        return []
+    reason = next(
+        (line.strip() for line in log.getvalue().splitlines() if line.startswith("Error creating")),
+        "",
+    )
+    return [
+        ValidationIssue(
+            code="rows_dropped",
+            message=(
+                f"{dropped} of {len(normalized)} rows cannot become touchpoints and will be "
+                f"left out of analyses. First reason: {reason[:300]}"
+            ),
+        )
+    ]
 
 
 def _dataset_response(dataset: Dataset):
@@ -134,6 +164,8 @@ async def validate_dataset(dataset_id: str, session_factory, storage):
             extension = Path(dataset.filename).suffix.lower().lstrip(".")
             frame = _read_frame(raw, extension)
             report = _validation_report(frame)
+            if not report.errors:
+                report.warnings.extend(_dropped_row_warnings(frame))
             dataset.touchpoint_count = len(frame)
             dataset.unique_customers = (
                 int(frame["customer_id"].nunique()) if "customer_id" in frame else None

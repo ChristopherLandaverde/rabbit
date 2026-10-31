@@ -44,6 +44,11 @@ class AnalysisMetadata(BaseModel):
     time_range_end: datetime = Field(..., description="Analysis end time")
     linking_method: str = Field(..., description="Method used for identity linking")
     processing_time_ms: int = Field(..., ge=0, description="Processing time in milliseconds")
+    rows_dropped: int = Field(
+        0, ge=0,
+        description="Input rows that did not become a touchpoint in any journey "
+                    "(no usable identifier, or a value the touchpoint model rejects)",
+    )
 
 
 class AttributionResponse(BaseModel):

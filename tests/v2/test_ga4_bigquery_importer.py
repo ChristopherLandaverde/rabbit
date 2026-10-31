@@ -23,7 +23,7 @@ FIVE_MODELS = ["first_touch", "last_touch", "linear", "time_decay", "position_ba
 def _import(client=None, **kwargs):
     client = client or FakeBigQueryClient()
     params = dict(project="demo-project-123", dataset="analytics_123456789",
-                  start="20240301", end="20240315", conversion_event="purchase")
+                  start="20250301", end="20250315", conversion_event="purchase")
     params.update(kwargs)
     return ga4.import_ga4(client=client, **params), client
 
@@ -54,10 +54,10 @@ def test_mapping_matches_hand_built_touchpoints():
     assert result.stats == {
         "session_starts": 12, "conversions": 4, "skipped_no_identity": 0,
         "skipped_other_event": 0,
-        "channel_from_collected_utm": 4,
+        "channel_from_collected_utm": 5,
         "channel_from_collected_gclid": 2,
         "channel_from_last_non_direct_click": 7,
-        "channel_from_event_params": 1,
+        "channel_from_event_params": 0,
         "channel_direct": 2,
     }
 
@@ -70,9 +70,9 @@ def _mapped():
 def test_not_set_and_null_sources_map_to_direct():
     got = _mapped()
     # Last click (direct)/(none): a first visit with no earlier source.
-    assert got[("user:u_madeup_0007", "2024-03-01 12:00:00", "view")].channel == "direct"
+    assert got[("user:u_madeup_0007", "2025-03-01 12:00:00", "view")].channel == "direct"
     # Last click (not set)/(not set).
-    assert got[("ga4:7000000007.1709340000", "2024-03-02 20:00:00", "view")].channel == "direct"
+    assert got[("ga4:7000000007.1709340000", "2025-03-02 20:00:00", "view")].channel == "direct"
     for unset in [None, "", "(not set)", "(none)", "(direct)", "  (not set) "]:
         row = {"collected_traffic_source": {"manual_source": unset},
                "session_traffic_source_last_click": {"cross_channel_campaign": {"source": unset}}}
@@ -84,15 +84,15 @@ def test_not_set_and_null_sources_map_to_direct():
 def test_untagged_sessions_follow_ga4_last_non_direct_click():
     got = _mapped()
     # Untagged organic: nothing collected, source from last click.
-    assert got[("ga4:4000000004.1709310000", "2024-03-01 15:00:00", "view")].channel == "google / organic"
+    assert got[("ga4:4000000004.1709310000", "2025-03-01 15:00:00", "view")].channel == "google / organic"
     # Direct return visit inherits the earlier source, as in GA4's session source.
-    assert got[("ga4:4000000004.1709310000", "2024-03-02 15:00:00", "view")].channel == "google / organic"
-    assert got[("ga4:6000000006.1709330000", "2024-03-08 00:00:00", "view")].channel == "newsletter / email"
+    assert got[("ga4:4000000004.1709310000", "2025-03-02 15:00:00", "view")].channel == "google / organic"
+    assert got[("ga4:6000000006.1709330000", "2025-03-08 00:00:00", "view")].channel == "newsletter / email"
 
 
 def test_gclid_only_session_is_google_cpc_with_ads_campaign():
     got = _mapped()
-    touch = got[("ga4:5000000005.1709320000", "2024-03-03 11:00:00", "view")]
+    touch = got[("ga4:5000000005.1709320000", "2025-03-03 11:00:00", "view")]
     assert (touch.channel, touch.campaign_id) == ("google / cpc", "brand_search")
     bare = {"collected_traffic_source": {"gclid": "x"}, "session_traffic_source_last_click": None}
     assert ga4.traffic_source(bare) == ("google", "cpc", None, "collected_gclid")
@@ -119,22 +119,33 @@ def test_channel_precedence():
     # Last click beats params; a present last-click record with no source is direct.
     assert ga4.traffic_source(row(None, last, params)) == ("bing", "cpc", "brand", "last_non_direct_click")
     assert ga4.traffic_source(row(None, {"cross_channel_campaign": None}, params))[3] == "direct"
-    # Params only when the row has no last-click record (pre-2024 export).
+    # Params only when the row has no last-click record (exported before July 2024).
     assert ga4.traffic_source(row(None, None, [("source", "Facebook"), ("medium", "Social"),
                                                ("campaign", "q1")])) == (
         "Facebook", "Social", "q1", "event_params")
     assert ga4.channel_name("newsletter", None) == "newsletter"
     got = _mapped()
-    assert got[("user:u_madeup_0007", "2024-03-02 08:00:00", "view")].channel == "facebook / social"
+    assert got[("user:u_madeup_0007", "2025-03-02 08:00:00", "view")].channel == "facebook / social"
+    # A present last-click record with no cross-channel source falls back to
+    # manual_campaign, then google_ads_campaign (July-October 2024 exports).
+    manual = {"cross_channel_campaign": None,
+              "manual_campaign": {"source": "newsletter", "medium": "email", "campaign_name": "n"},
+              "google_ads_campaign": {"campaign_name": "ads"}}
+    assert ga4.traffic_source(row(None, manual, params)) == (
+        "newsletter", "email", "n", "last_non_direct_click")
+    ads_only = {"cross_channel_campaign": None, "manual_campaign": {"source": "(not set)"},
+                "google_ads_campaign": {"campaign_id": "111", "campaign_name": "ads"}}
+    assert ga4.traffic_source(row(None, ads_only, params)) == (
+        "google", "cpc", "ads", "last_non_direct_click")
 
 
 def test_conversion_value_prefers_usd_then_revenue_then_value_param():
     got = _mapped()
     # purchase_revenue_in_usd 81.0 beats purchase_revenue 75.0 (EUR) and value 75.0.
-    assert got[("ga4:4000000004.1709310000", "2024-03-02 15:10:00", "conversion")].conversion_value == 81.0
+    assert got[("ga4:4000000004.1709310000", "2025-03-02 15:10:00", "conversion")].conversion_value == 81.0
     # No ecommerce revenue -> value param 49.99.
-    assert got[("user:u_madeup_0007", "2024-03-03 18:05:00", "conversion")].conversion_value == 49.99
-    assert got[("ga4:1000000001.1709280000", "2024-03-02 09:20:00", "conversion")].conversion_value == 120.5
+    assert got[("user:u_madeup_0007", "2025-03-03 18:05:00", "conversion")].conversion_value == 49.99
+    assert got[("ga4:1000000001.1709280000", "2025-03-02 09:20:00", "conversion")].conversion_value == 120.5
     assert ga4.conversion_value({"ecommerce": {"purchase_revenue": 7.5}}) == 7.5
     int_param = {"ecommerce": None, "event_params": [{"key": "value", "value": {"int_value": 12}}]}
     assert ga4.conversion_value(int_param) == 12.0
@@ -185,7 +196,7 @@ FORBIDDEN = re.compile(
     re.IGNORECASE,
 )
 CLI_ARGS = ["--project", "demo-project-123", "--dataset", "analytics_123456789",
-            "--start", "20240301", "--end", "20240315", "--conversion-event", "purchase"]
+            "--start", "20250301", "--end", "20250315", "--conversion-event", "purchase"]
 
 
 def test_generated_sql_is_a_single_select_with_partition_pruning():
@@ -205,9 +216,9 @@ def test_generated_sql_is_a_single_select_with_partition_pruning():
 
 
 def test_schema_comes_from_newest_table_matching_the_wildcard():
-    _, client = _import(end="20240302")
+    _, client = _import(end="20250302")
     # Newest matching table is the intraday one, outside the requested range.
-    assert client.schema_reads == ["demo-project-123.analytics_123456789.events_intraday_20240315"]
+    assert client.schema_reads == ["demo-project-123.analytics_123456789.events_intraday_20250315"]
 
 
 def test_old_export_without_traffic_source_columns_selects_only_base_columns():
@@ -230,7 +241,7 @@ def test_dry_run_first_then_query_with_maximum_bytes_billed():
     assert real["job_config"].maximum_bytes_billed == 123_456_789
     assert dry["api_method"] == real["api_method"] == "QUERY"  # jobs.query, not jobs.insert
     params = {p.name: p.value for p in real["job_config"].query_parameters}
-    assert params == {"start": "20240301", "end": "20240315", "conversion_event": "purchase"}
+    assert params == {"start": "20250301", "end": "20250315", "conversion_event": "purchase"}
     assert result.estimated_bytes == 52_428_800
 
 
@@ -317,9 +328,9 @@ def test_start_and_end_are_required(capsys):
 
 @pytest.mark.parametrize("kwargs", [
     {"start": "20240305", "end": "20240301"},
-    {"start": "2024-03-01"},
+    {"start": "2025-03-01"},
     {"end": "20240231"},
-    {"start": "20240301\n"},
+    {"start": "20250301\n"},
     {"dataset": "analytics`; DROP TABLE x; --"},
     {"dataset": "analytics_1\n"},
     {"project": "Bad Project"},
@@ -337,7 +348,7 @@ def test_invalid_arguments_are_rejected_before_any_query(kwargs):
 
 def test_no_tables_in_range():
     with pytest.raises(ga4.NoExportTables):
-        _import(start="20250101", end="20250131")
+        _import(start="20260101", end="20260131")
 
 
 def test_make_client_uses_adc_with_read_only_scope():
@@ -359,9 +370,9 @@ def test_make_client_uses_adc_with_read_only_scope():
 # --- equivalence with the CSV upload path --------------------------------------
 
 
-def _upload_path(content: bytes):
-    """What POST /v2/datasets plus an analysis do with an uploaded CSV."""
-    frame = _read_frame(content, "csv")
+def _upload_path(content: bytes, extension: str = "csv"):
+    """What POST /v2/datasets plus an analysis do with an uploaded file."""
+    frame = _read_frame(content, extension)
     assert _validation_report(frame).errors == []
     return {
         model: compute_model_result(frame, model, resolve_parameters(model, None))
@@ -464,3 +475,57 @@ def test_five_models_on_test_data_csv_unchanged(model):
     assert credits == pytest.approx(TEST_DATA_GOLDEN[model], abs=1e-12)
     assert summary["total_conversions"] == 3
     assert summary["total_revenue"] == 225.0
+
+
+# --- exports across the July / October 2024 schema changes ---------------------
+
+TRANSITION_ROWS = Path(__file__).resolve().parents[1] / "fixtures" / "ga4" / "events_rows_2024_transition.json"
+
+
+def test_july_to_october_2024_rows_use_manual_and_ads_last_click():
+    import json
+
+    rows = json.loads(TRANSITION_ROWS.read_text())
+    client = FakeBigQueryClient(rows=rows, days=("20240620", "20240810", "20240811",
+                                                  "20240812", "20241102"))
+    result, _ = _import(client, start="20240620", end="20241102")
+    channels = list(zip(result.frame.timestamp.str[:10], result.frame.event_type,
+                        result.frame.channel, result.frame.campaign_id))
+    assert channels == [
+        ("2024-06-20", "view", "google / organic", None),          # event params
+        ("2024-08-10", "view", "newsletter / email", "aug_news"),  # last click manual_campaign
+        ("2024-08-11", "view", "google / cpc", "brand_search"),    # last click google_ads_campaign
+        ("2024-08-12", "view", "direct", None),                    # (direct) / (none)
+        ("2024-08-12", "conversion", "direct", None),
+        ("2024-11-02", "view", "google / organic", None),          # cross_channel_campaign
+    ]
+    assert result.stats["channel_from_event_params"] == 1
+    assert result.stats["channel_from_last_non_direct_click"] == 3
+    assert result.stats["channel_direct"] == 2
+    assert result.frame.conversion_value.dropna().tolist() == [30.0]
+
+
+# --- credential and response errors ----------------------------------------------
+
+
+def test_refresh_error_maps_to_exit_5(capsys):
+    from google.auth.exceptions import RefreshError
+
+    code = ga4.main(CLI_ARGS, client=FakeBigQueryClient(query_error=RefreshError("token expired")))
+    assert code == 5
+    err = capsys.readouterr().err
+    assert "RefreshError" in err and "application-default login" in err
+
+
+def test_dry_run_response_without_job_reference_maps_to_exit_6(capsys):
+    class NoJobReference(FakeBigQueryClient):
+        def query(self, sql, job_config=None, api_method="INSERT", **kwargs):
+            if job_config is not None and job_config.dry_run:
+                self.queries.append({"sql": sql, "job_config": job_config, "api_method": api_method})
+                raise KeyError("jobReference")
+            return super().query(sql, job_config, api_method, **kwargs)
+
+    client = NoJobReference()
+    assert ga4.main(CLI_ARGS, client=client) == 6
+    assert "no jobReference field" in capsys.readouterr().err
+    assert len(client.queries) == 1

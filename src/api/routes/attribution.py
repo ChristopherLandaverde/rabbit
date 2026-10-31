@@ -18,6 +18,7 @@ from ...core.caching import attribution_cache, api_cache
 from ...core.logging import security_logger, performance_logger, business_logger
 from ...core.security import input_validator
 from ...config import get_settings
+from ...utils.touchpoint_frames import read_touchpoint_frame
 
 router = APIRouter()
 settings = get_settings()
@@ -379,12 +380,9 @@ async def _parse_uploaded_file(file_content: bytes, filename: str) -> pd.DataFra
     file_extension = filename.lower().split('.')[-1] if filename else 'csv'
     
     try:
-        if file_extension == 'csv':
-            df = pd.read_csv(io.BytesIO(file_content))
-        elif file_extension == 'json':
-            df = pd.read_json(io.BytesIO(file_content))
-        elif file_extension == 'parquet':
-            df = pd.read_parquet(io.BytesIO(file_content))
+        if file_extension in ('csv', 'json', 'parquet'):
+            # Identifier columns stay text so numeric-looking ids keep every row (#66).
+            df = read_touchpoint_frame(file_content, file_extension, json_lines_first=False)
         else:
             raise ValueError(f"Unsupported file format: {file_extension}")
         

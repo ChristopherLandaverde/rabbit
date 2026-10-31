@@ -244,12 +244,16 @@ def traffic_source(row: Mapping[str, Any]) -> tuple[str | None, str | None, str 
     2. ``collected_traffic_source.gclid`` with no UTM source: Google Ads
        auto-tagging, so ``google / cpc``, with the campaign name from
        ``session_traffic_source_last_click.google_ads_campaign``.
-    3. ``session_traffic_source_last_click.cross_channel_campaign``: GA4's
-       last non-direct click, which is how GA4 itself credits untagged
-       organic, referral and direct sessions. A direct visit after an earlier
-       tagged one therefore inherits that earlier source.
+    3. ``session_traffic_source_last_click``: GA4's last non-direct click,
+       which is how GA4 itself credits untagged organic, referral and direct
+       sessions, so a direct visit after an earlier tagged one inherits that
+       earlier source. Read from ``cross_channel_campaign`` (in the export
+       from October 2024); when that has no source, from ``manual_campaign``,
+       then ``google_ads_campaign`` as ``google / cpc`` (rows from July to
+       October 2024 have only those two).
     4. Event params ``source``/``medium``/``campaign``, only when the row has
-       no ``session_traffic_source_last_click`` at all (exports before 2024).
+       no ``session_traffic_source_last_click`` at all (exported before July
+       2024).
     5. Otherwise ``direct``. ``(not set)``, ``(none)``, ``(direct)`` and null
        count as no source at every step.
     """
@@ -267,15 +271,19 @@ def traffic_source(row: Mapping[str, Any]) -> tuple[str | None, str | None, str 
         ads = _get(last_click, "google_ads_campaign") or {}
         return "google", "cpc", _clean(ads.get("campaign_name")), SOURCE_GCLID
     if last_click:
-        cross = last_click.get("cross_channel_campaign") or {}
-        source = _clean(cross.get("source"))
-        if source:
-            return (
-                source,
-                _clean(cross.get("medium")),
-                _clean(cross.get("campaign_name")),
-                SOURCE_LAST_CLICK,
-            )
+        for record in ("cross_channel_campaign", "manual_campaign"):
+            campaign = last_click.get(record) or {}
+            source = _clean(campaign.get("source"))
+            if source:
+                return (
+                    source,
+                    _clean(campaign.get("medium")),
+                    _clean(campaign.get("campaign_name")),
+                    SOURCE_LAST_CLICK,
+                )
+        ads = last_click.get("google_ads_campaign") or {}
+        if any(_clean(ads.get(key)) for key in ("campaign_id", "campaign_name", "customer_id")):
+            return "google", "cpc", _clean(ads.get("campaign_name")), SOURCE_LAST_CLICK
         return None, None, None, DIRECT
     source = _clean(event_param(row, "source"))
     if source:
@@ -526,6 +534,7 @@ def import_ga4(
     Google API errors are raised as :class:`ImportErrorBase` subclasses.
     """
     from google.api_core.exceptions import GoogleAPIError
+    from google.auth.exceptions import GoogleAuthError
 
     validate_arguments(project, dataset, start, end, conversion_event)
     if max_bytes <= 0:
@@ -535,11 +544,20 @@ def import_ga4(
         columns, table_count = _available_columns(client, project, dataset, start, end)
         sql = build_query(project, dataset, columns)
 
-        dry = client.query(
-            sql,
-            job_config=_job_config(start, end, conversion_event, dry_run=True, max_bytes=max_bytes),
-            api_method="QUERY",
-        )
+        try:
+            dry = client.query(
+                sql,
+                job_config=_job_config(start, end, conversion_event, dry_run=True, max_bytes=max_bytes),
+                api_method="QUERY",
+            )
+        except KeyError as exc:
+            # The client builds a job from the jobs.query response and expects
+            # a jobReference; a dry-run response without one cannot be read.
+            raise BigQueryFailed(
+                f"The dry-run response had no {exc.args[0] if exc.args else 'job'} field, so "
+                "the bytes estimate could not be read and the cost guard cannot run. "
+                "Nothing was queried."
+            ) from exc
         if dry.total_bytes_processed is None:
             raise BigQueryFailed(
                 "The dry run returned no bytes estimate, so the cost guard cannot run. "
@@ -559,6 +577,12 @@ def import_ga4(
         rows = list(job.result())
     except GoogleAPIError as exc:
         raise _translate(exc) from exc
+    except GoogleAuthError as exc:
+        # e.g. RefreshError: expired or revoked ADC. The message names no secret.
+        raise AccessDenied(
+            "Google credentials could not be used ("
+            f"{type(exc).__name__}). Re-run `gcloud auth application-default login`."
+        ) from exc
     frame, stats = rows_to_touchpoints(rows, conversion_event)
     processed = getattr(job, "total_bytes_processed", None)
     return ImportResult(
@@ -655,7 +679,7 @@ def main(argv: list[str] | None = None, *, client=None) -> int:
         f"{stats['channel_from_collected_utm']} UTM tags, "
         f"{stats['channel_from_collected_gclid']} gclid (google / cpc), "
         f"{stats['channel_from_last_non_direct_click']} GA4 last non-direct click, "
-        f"{stats['channel_from_event_params']} event params (pre-2024 export), "
+        f"{stats['channel_from_event_params']} event params (exported before July 2024), "
         f"{stats['channel_direct']} direct.",
         file=err,
     )

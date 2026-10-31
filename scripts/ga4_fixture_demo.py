@@ -20,8 +20,8 @@ if __name__ == "__main__":
     argv = sys.argv[1:] or [
         "--project", "demo-project-123",
         "--dataset", "analytics_123456789",
-        "--start", "20240301",
-        "--end", "20240315",
+        "--start", "20250301",
+        "--end", "20250315",
         "--conversion-event", "purchase",
         "--out", "ga4_touchpoints.csv",
     ]

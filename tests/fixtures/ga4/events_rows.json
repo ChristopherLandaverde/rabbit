@@ -1,7 +1,7 @@
 [
  {
-  "event_date": "20240301",
-  "event_timestamp": 1709287200000000,
+  "event_date": "20250301",
+  "event_timestamp": 1740823200000000,
   "event_name": "session_start",
   "user_pseudo_id": "1000000001.1709280000",
   "user_id": null,
@@ -10,7 +10,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709287200,
+     "int_value": 1740823200,
      "float_value": null,
      "double_value": null
     }
@@ -80,8 +80,8 @@
   }
  },
  {
-  "event_date": "20240302",
-  "event_timestamp": 1709370000000000,
+  "event_date": "20250302",
+  "event_timestamp": 1740906000000000,
   "event_name": "session_start",
   "user_pseudo_id": "1000000001.1709280000",
   "user_id": null,
@@ -90,7 +90,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709370000,
+     "int_value": 1740906000,
      "float_value": null,
      "double_value": null
     }
@@ -160,8 +160,8 @@
   }
  },
  {
-  "event_date": "20240302",
-  "event_timestamp": 1709371200000000,
+  "event_date": "20250302",
+  "event_timestamp": 1740907200000000,
   "event_name": "purchase",
   "user_pseudo_id": "1000000001.1709280000",
   "user_id": null,
@@ -170,7 +170,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709370000,
+     "int_value": 1740906000,
      "float_value": null,
      "double_value": null
     }
@@ -245,8 +245,8 @@
   }
  },
  {
-  "event_date": "20240301",
-  "event_timestamp": 1709294400000000,
+  "event_date": "20250301",
+  "event_timestamp": 1740830400000000,
   "event_name": "session_start",
   "user_pseudo_id": "2000000002.1709290000",
   "user_id": null,
@@ -255,7 +255,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709294400,
+     "int_value": 1740830400,
      "float_value": null,
      "double_value": null
     }
@@ -312,8 +312,8 @@
   }
  },
  {
-  "event_date": "20240302",
-  "event_timestamp": 1709366400000000,
+  "event_date": "20250302",
+  "event_timestamp": 1740902400000000,
   "event_name": "session_start",
   "user_pseudo_id": "2000000002.1709290000",
   "user_id": "u_madeup_0007",
@@ -322,7 +322,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709366400,
+     "int_value": 1740902400,
      "float_value": null,
      "double_value": null
     }
@@ -364,8 +364,46 @@
     }
    }
   ],
-  "collected_traffic_source": null,
-  "session_traffic_source_last_click": null,
+  "collected_traffic_source": {
+   "manual_campaign_id": null,
+   "manual_campaign_name": "retarget_q1",
+   "manual_source": "facebook",
+   "manual_medium": "social",
+   "manual_term": null,
+   "manual_content": null,
+   "manual_source_platform": null,
+   "manual_creative_format": null,
+   "manual_marketing_tactic": null,
+   "gclid": null,
+   "dclid": null,
+   "srsltid": null
+  },
+  "session_traffic_source_last_click": {
+   "manual_campaign": {
+    "campaign_id": null,
+    "campaign_name": "retarget_q1",
+    "source": "facebook",
+    "medium": "social",
+    "term": null,
+    "content": null,
+    "source_platform": null,
+    "creative_format": null,
+    "marketing_tactic": null
+   },
+   "google_ads_campaign": null,
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "retarget_q1",
+    "source": "facebook",
+    "medium": "social",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
+  },
   "ecommerce": {
    "total_item_quantity": null,
    "purchase_revenue_in_usd": null,
@@ -381,8 +419,8 @@
   }
  },
  {
-  "event_date": "20240303",
-  "event_timestamp": 1709488800000000,
+  "event_date": "20250303",
+  "event_timestamp": 1741024800000000,
   "event_name": "session_start",
   "user_pseudo_id": "3000000003.1709300000",
   "user_id": "u_madeup_0007",
@@ -391,7 +429,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709488800,
+     "int_value": 1741024800,
      "float_value": null,
      "double_value": null
     }
@@ -461,8 +499,8 @@
   }
  },
  {
-  "event_date": "20240303",
-  "event_timestamp": 1709489100000000,
+  "event_date": "20250303",
+  "event_timestamp": 1741025100000000,
   "event_name": "purchase",
   "user_pseudo_id": "3000000003.1709300000",
   "user_id": "u_madeup_0007",
@@ -471,7 +509,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709488800,
+     "int_value": 1741024800,
      "float_value": null,
      "double_value": null
     }
@@ -546,8 +584,8 @@
   }
  },
  {
-  "event_date": "20240301",
-  "event_timestamp": 1709305200000000,
+  "event_date": "20250301",
+  "event_timestamp": 1740841200000000,
   "event_name": "session_start",
   "user_pseudo_id": "4000000004.1709310000",
   "user_id": null,
@@ -556,7 +594,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709305200,
+     "int_value": 1740841200,
      "float_value": null,
      "double_value": null
     }
@@ -613,8 +651,8 @@
   }
  },
  {
-  "event_date": "20240302",
-  "event_timestamp": 1709391600000000,
+  "event_date": "20250302",
+  "event_timestamp": 1740927600000000,
   "event_name": "session_start",
   "user_pseudo_id": "4000000004.1709310000",
   "user_id": null,
@@ -623,7 +661,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709391600,
+     "int_value": 1740927600,
      "float_value": null,
      "double_value": null
     }
@@ -680,8 +718,8 @@
   }
  },
  {
-  "event_date": "20240302",
-  "event_timestamp": 1709392200000000,
+  "event_date": "20250302",
+  "event_timestamp": 1740928200000000,
   "event_name": "purchase",
   "user_pseudo_id": "4000000004.1709310000",
   "user_id": null,
@@ -690,7 +728,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709391600,
+     "int_value": 1740927600,
      "float_value": null,
      "double_value": null
     }
@@ -765,8 +803,8 @@
   }
  },
  {
-  "event_date": "20240303",
-  "event_timestamp": 1709463600000000,
+  "event_date": "20250303",
+  "event_timestamp": 1740999600000000,
   "event_name": "session_start",
   "user_pseudo_id": "5000000005.1709320000",
   "user_id": null,
@@ -775,7 +813,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709463600,
+     "int_value": 1740999600,
      "float_value": null,
      "double_value": null
     }
@@ -852,8 +890,8 @@
   }
  },
  {
-  "event_date": "20240302",
-  "event_timestamp": 1709409600000000,
+  "event_date": "20250302",
+  "event_timestamp": 1740945600000000,
   "event_name": "session_start",
   "user_pseudo_id": "7000000007.1709340000",
   "user_id": null,
@@ -862,7 +900,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709409600,
+     "int_value": 1740945600,
      "float_value": null,
      "double_value": null
     }
@@ -919,8 +957,8 @@
   }
  },
  {
-  "event_date": "20240301",
-  "event_timestamp": 1709251200000000,
+  "event_date": "20250301",
+  "event_timestamp": 1740787200000000,
   "event_name": "session_start",
   "user_pseudo_id": "6000000006.1709330000",
   "user_id": null,
@@ -929,7 +967,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709251200,
+     "int_value": 1740787200,
      "float_value": null,
      "double_value": null
     }
@@ -999,8 +1037,8 @@
   }
  },
  {
-  "event_date": "20240308",
-  "event_timestamp": 1709856000000000,
+  "event_date": "20250308",
+  "event_timestamp": 1741392000000000,
   "event_name": "session_start",
   "user_pseudo_id": "6000000006.1709330000",
   "user_id": null,
@@ -1009,7 +1047,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1709856000,
+     "int_value": 1741392000,
      "float_value": null,
      "double_value": null
     }
@@ -1066,8 +1104,8 @@
   }
  },
  {
-  "event_date": "20240315",
-  "event_timestamp": 1710460800000000,
+  "event_date": "20250315",
+  "event_timestamp": 1741996800000000,
   "event_name": "session_start",
   "user_pseudo_id": "6000000006.1709330000",
   "user_id": null,
@@ -1076,7 +1114,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1710460800,
+     "int_value": 1741996800,
      "float_value": null,
      "double_value": null
     }
@@ -1153,8 +1191,8 @@
   }
  },
  {
-  "event_date": "20240315",
-  "event_timestamp": 1710460800000000,
+  "event_date": "20250315",
+  "event_timestamp": 1741996800000000,
   "event_name": "purchase",
   "user_pseudo_id": "6000000006.1709330000",
   "user_id": null,
@@ -1163,7 +1201,7 @@
     "key": "ga_session_id",
     "value": {
      "string_value": null,
-     "int_value": 1710460800,
+     "int_value": 1741996800,
      "float_value": null,
      "double_value": null
     }

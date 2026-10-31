@@ -18,8 +18,8 @@ Status: fixture-verified. The mapping, cost guard, error handling and model equi
 | 2 | Bad argument, or no `events_YYYYMMDD` tables in range (also a BigQuery `NotFound`). |
 | 3 | Refused by the dry-run guard: the estimate is above `--max-bytes`. Nothing billable ran. |
 | 4 | BigQuery refused the real query because it would bill more than `maximum_bytes_billed` (`--max-bytes`). |
-| 5 | No Application Default Credentials, or BigQuery denied access (missing role or scope). |
-| 6 | Any other BigQuery error, including a dry run that returned no bytes estimate. |
+| 5 | No Application Default Credentials, credentials that can't be used (for example an expired or revoked token, `RefreshError`), or BigQuery denied access (missing role or scope). |
+| 6 | Any other BigQuery error, including a dry run that returned no bytes estimate or a dry-run response the client could not read (no `jobReference`). |
 
 ## Which rows are read
 
@@ -35,9 +35,9 @@ WHERE _TABLE_SUFFIX BETWEEN @start AND @end
 ORDER BY user_pseudo_id, event_timestamp
 ```
 
-- `_TABLE_SUFFIX BETWEEN` prunes the scan to the daily tables in range. `events_intraday_*` sorts after every date and is never read.
+- `_TABLE_SUFFIX BETWEEN` prunes the scan to the daily tables in range. `events_intraday_*` sorts after every date and is never read. GA4 360 `events_fresh_*` tables are a different table prefix and are not considered.
 - Only the listed columns are selected. BigQuery bills by columns read, so this costs a fraction of `SELECT *`.
-- A wildcard query takes its schema from the most recently created table matching `events_*`. That can be today's `events_intraday_*` table or a day outside the range. The importer reads that table's schema and selects `collected_traffic_source` (added to the export in 2023), `session_traffic_source_last_click` (2024) and `ecommerce` only when it has them.
+- A wildcard query takes its schema from the most recently created table matching `events_*`. That can be today's `events_intraday_*` table or a day outside the range. The importer reads that table's schema and selects `collected_traffic_source` (added to the export in June 2023), `session_traffic_source_last_click` (July 2024; its `cross_channel_campaign` record followed in October 2024) and `ecommerce` only when it has them. These dates come from third-party write-ups of the export's changes (for example Analytica House, "GA4 BigQuery export evolution: traffic sources"), not from a Google page this change could reach.
 - Dates and the conversion event are query parameters. Project and dataset are checked in full against GCP's id rules before they go into the table name. `--conversion-event session_start` is rejected.
 
 ## Field mapping
@@ -58,8 +58,8 @@ The channel matches what GA4 itself reports as a session's source/medium. Each `
 
 1. **UTM tags**: `collected_traffic_source.manual_source` / `manual_medium` / `manual_campaign_name`. In a real export this record holds only UTM values and click ids (`gclid`, `dclid`, `srsltid`).
 2. **Google Ads auto-tagging**: a `collected_traffic_source.gclid` with no UTM source becomes `google / cpc`, with the campaign from `session_traffic_source_last_click.google_ads_campaign.campaign_name` when present.
-3. **GA4's last non-direct click**: `session_traffic_source_last_click.cross_channel_campaign` source / medium / campaign. Untagged organic, referral and direct sessions get their source here.
-4. **Event params** `source` / `medium` / `campaign`, used only when the row has no `session_traffic_source_last_click` at all (exports from before 2024).
+3. **GA4's last non-direct click**: `session_traffic_source_last_click`. Untagged organic, referral and direct sessions get their source here. Read from `cross_channel_campaign` source / medium / campaign (in the export from October 2024); when that has no source, from `manual_campaign`, then from `google_ads_campaign` as `google / cpc`. Rows exported from July to October 2024 have only those two.
+4. **Event params** `source` / `medium` / `campaign`, used only when the row has no `session_traffic_source_last_click` at all (exported before July 2024).
 5. Otherwise **`direct`**. A source that is null, empty, `(not set)`, `(none)`, `(direct)` or `(not provided)` counts as no source at every step.
 
 What this means for the numbers: untagged sessions take GA4's last-non-direct session source, the same as GA4's session source/medium. A direct visit after an email visit counts as an email touch. `direct` is therefore undercounted compared with a strictly session-scoped source, and a returning visitor's earlier source can repeat as a touch, which gives that source more weight under `linear`, `time_decay` and `position_based`.
@@ -77,6 +77,8 @@ What this means for the numbers: untagged sessions take GA4's last-non-direct se
 - **Journeys are truncated at `--start`.** Touches before the first day in range are not read, so a journey that began earlier is credited only from `--start` onward. Pick a start date earlier than the conversions you care about by at least your lookback window.
 - **Recent days can still change.** GA4 can update daily tables for up to about 72 hours after the day ends (late hits). Re-run once the range is older than that.
 - **Consent-denied traffic is not counted.** With Consent Mode, denied users send cookieless pings with a null `user_pseudo_id`. Those rows have no identity and are skipped; the CLI prints how many.
+- **A range that crosses July 2024 mixes two channel sources.** Days exported before July 2024 have no `session_traffic_source_last_click`, so their channel comes from event params; later days use GA4's last non-direct click. The same visit pattern can get a different channel on either side of that date.
+- **GA4 360 fresh tables** (`events_fresh_*`) are not read; only the daily `events_YYYYMMDD` tables are.
 - **Last-click inheritance.** Untagged sessions take GA4's last non-direct source (see [Channel](#channel)), so `direct` is undercounted and earlier sources can repeat.
 - Only `session_start` and the conversion event become touchpoints. Sessions without a `session_start` event (for example Measurement Protocol hits) are not counted as touches.
 - Channel is source/medium, not GA4's default channel grouping.
