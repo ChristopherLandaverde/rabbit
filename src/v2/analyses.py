@@ -172,6 +172,35 @@ def resolve_parameters(model: str, options: dict[str, Any] | None) -> dict[str, 
     return parameters
 
 
+def validate_models(models: list[str]) -> None:
+    """Check a request's model list: 1 to 5 registered models, each once."""
+    if not models:
+        raise _invalid(
+            "validation_failed", "models must name 1 to 5 models.", 'Send "models": ["linear"].'
+        )
+    if len(models) > MAX_MODELS_PER_ANALYSIS:
+        raise _invalid(
+            "too_many_models",
+            f"An analysis runs at most {MAX_MODELS_PER_ANALYSIS} models; got {len(models)}.",
+            "Name each model once; there are five registered models.",
+        )
+    valid = [model.value for model in AttributionModelType]
+    unknown = [model for model in models if model not in valid]
+    if unknown:
+        raise _invalid(
+            "unknown_model",
+            f"Unknown model(s): {', '.join(unknown)}. Registered models: {', '.join(valid)}.",
+            "Choose one of the registered models.",
+        )
+    repeated = sorted({model for model in models if models.count(model) > 1})
+    if repeated:
+        raise _invalid(
+            "validation_failed",
+            f"models must not repeat: {', '.join(repeated)}.",
+            "List each model once.",
+        )
+
+
 # Parameters recorded on a result that are not constructor arguments of the model.
 NON_MODEL_PARAMETERS = {"middle_touch_weight", "conversion_window_days"}
 
@@ -612,31 +641,7 @@ async def create_analysis(
             existing.idempotency_key = None
             await session.commit()
 
-    if not payload.models:
-        raise _invalid(
-            "validation_failed", "models must name 1 to 5 models.", 'Send "models": ["linear"].'
-        )
-    if len(payload.models) > MAX_MODELS_PER_ANALYSIS:
-        raise _invalid(
-            "too_many_models",
-            f"An analysis runs at most {MAX_MODELS_PER_ANALYSIS} models; got {len(payload.models)}.",
-            "Name each model once; there are five registered models.",
-        )
-    valid = [model.value for model in AttributionModelType]
-    unknown = [model for model in payload.models if model not in valid]
-    if unknown:
-        raise _invalid(
-            "unknown_model",
-            f"Unknown model(s): {', '.join(unknown)}. Registered models: {', '.join(valid)}.",
-            "Choose one of the registered models.",
-        )
-    repeated = sorted({model for model in payload.models if payload.models.count(model) > 1})
-    if repeated:
-        raise _invalid(
-            "validation_failed",
-            f"models must not repeat: {', '.join(repeated)}.",
-            "List each model once.",
-        )
+    validate_models(payload.models)
     parameters = {model: resolve_parameters(model, payload.options) for model in payload.models}
 
     dataset = (

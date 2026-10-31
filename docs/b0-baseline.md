@@ -197,3 +197,25 @@ An autouse fixture in `conftest.py` now restores logger state after each test.
 
 The one error is `test_postgres_container_migration`, which needs Docker
 locally; CI runs it against its Postgres service.
+
+### Web stack upgrade for the MCP server (rabbit-mcp)
+
+The official `mcp` SDK needs `anyio>=4.5`, and fastapi 0.104.1 pinned
+`anyio<4`, so the web stack moved: fastapi 0.104.1 → 0.115.14, pydantic
+2.5.0 → 2.14.1, pydantic-settings 2.1.0 → 2.16.0, httpx 0.25.2 → 0.28.1 and
+uvicorn 0.24.0 → 0.54.0 (each released at least two weeks before
+2026-10-31). `mcp==1.30.0` is in the optional `requirements-mcp.txt`. No
+attribution code changed; `test_five_models_on_test_data_csv_unchanged` and
+the v1 comparison tests still pass. Local run on Python 3.12 without Docker:
+
+```text
+python -m pytest -q --ignore=tests/v2
+325 passed, 14 skipped, 52 xfailed
+
+python -m pytest -q tests/v2
+173 passed, 1 skipped, 1 error
+```
+
+The one error is `test_postgres_container_migration`, which needs Docker
+locally; CI runs it against its Postgres service. The v2 total includes 27 new
+tests in `tests/v2/test_mcp_server.py`.
