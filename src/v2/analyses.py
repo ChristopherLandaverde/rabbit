@@ -441,8 +441,12 @@ async def reap_stuck_analyses(
     """
     default_runtime, default_stale = janitor_settings()
     now = now or datetime.now(timezone.utc)
-    runtime_cutoff = now - timedelta(minutes=max_runtime_minutes or default_runtime)
-    stale_cutoff = now - timedelta(minutes=stale_after_minutes or default_stale)
+    if max_runtime_minutes is None:
+        max_runtime_minutes = default_runtime
+    if stale_after_minutes is None:
+        stale_after_minutes = default_stale
+    runtime_cutoff = now - timedelta(minutes=max_runtime_minutes)
+    stale_cutoff = now - timedelta(minutes=stale_after_minutes)
     stuck_conditions = (
         Analysis.status == "running",
         Analysis.started_at < runtime_cutoff,
@@ -550,6 +554,10 @@ def _idempotency_conflict(idempotency_key: str) -> ApiProblem:
     )
 
 
+def _within_window(analysis: Analysis) -> bool:
+    return datetime.now(timezone.utc) - _as_utc(analysis.created_at) < IDEMPOTENCY_WINDOW
+
+
 async def _find_idempotent(session, key_id: str, idempotency_key: str) -> Analysis | None:
     return (
         await session.execute(
@@ -598,7 +606,7 @@ async def create_analysis(
             )
         existing = await _find_idempotent(session, key.id, idempotency_key)
         if existing is not None:
-            if datetime.now(timezone.utc) - _as_utc(existing.created_at) < IDEMPOTENCY_WINDOW:
+            if _within_window(existing):
                 return _replay(existing, fingerprint, idempotency_key, key.livemode, response)
             # Older than 24h: release the key so the unique index admits a new analysis.
             existing.idempotency_key = None
@@ -662,11 +670,22 @@ async def create_analysis(
             "https://docs.rabbit.example/errors#dataset_too_large",
         )
 
-    # Lock the key row (Postgres) so concurrent POSTs for one key count in-flight
-    # analyses one at a time; SQLite ignores FOR UPDATE and serializes writes anyway.
+    # Lock the key row so concurrent POSTs for one key count in-flight analyses one
+    # at a time. Only Postgres honours FOR UPDATE: the cap is race-safe on Postgres
+    # only. On SQLite two concurrent POSTs can both pass the count.
     key_row = (
         await session.execute(select(ApiKey).where(ApiKey.id == key.id).with_for_update())
     ).scalar_one()
+    if idempotency_key is not None:
+        # A concurrent request with the same key may have inserted since the
+        # lookup above; under the lock, replay it rather than cap it.
+        existing = await _find_idempotent(session, key.id, idempotency_key)
+        if existing is not None and _within_window(existing):
+            try:
+                # Build the response before rollback, which expires loaded rows.
+                return _replay(existing, fingerprint, idempotency_key, key.livemode, response)
+            finally:
+                await session.rollback()  # release the key-row lock
     limit = key_row.max_concurrent_analyses or 3
     in_flight = (
         await session.execute(
@@ -706,8 +725,10 @@ async def create_analysis(
     except IntegrityError:
         # A concurrent request with the same Idempotency-Key won the insert.
         await session.rollback()
+        if idempotency_key is None:
+            raise
         existing = await _find_idempotent(session, key.id, idempotency_key)
-        if idempotency_key is None or existing is None:
+        if existing is None:
             raise
         return _replay(existing, fingerprint, idempotency_key, key.livemode, response)
 

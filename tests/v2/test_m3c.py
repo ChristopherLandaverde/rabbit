@@ -486,3 +486,84 @@ def test_five_models_on_test_data_stay_pinned(model):
     total = sum(raw.values())
     credits = {channel: value["credit"] for channel, value in result["channels"].items()}
     assert credits == pytest.approx({c: v / total for c, v in raw.items()}, abs=1e-12)
+
+
+def test_concurrent_same_key_request_at_two_of_three_in_flight_replays_not_caps(
+    client, make_key, storage_dir, deferred_worker, monkeypatch
+):
+    """Two same-key POSTs at 2/3 in flight, interleaved: A inserts the third
+    analysis after B's pre-lock lookup ran. B's pre-lock lookup is made to miss
+    A (the race window); the re-check under the key-row lock must find A and
+    replay it instead of returning 429."""
+    from src.v2 import analyses
+
+    key = make_key(client, scopes=ALL_SCOPES)
+    dataset_id = _upload(client, key)
+    assert _post(client, key, dataset_id).status_code == 202
+    assert _post(client, key, dataset_id).status_code == 202  # 2 of 3 in flight
+    a = _post(client, key, dataset_id, idempotency_key="race")  # A: now 3 of 3
+    assert a.status_code == 202, a.text
+
+    real_find = analyses._find_idempotent
+    calls = []
+
+    async def miss_first_lookup(session, key_id, idempotency_key):
+        calls.append(idempotency_key)
+        if len(calls) == 1:
+            return None  # B looked before A's insert was visible
+        return await real_find(session, key_id, idempotency_key)
+
+    monkeypatch.setattr(analyses, "_find_idempotent", miss_first_lookup)
+    b = _post(client, key, dataset_id, idempotency_key="race")
+    assert len(calls) == 2  # pre-lock lookup, then the re-check under the lock
+    assert b.status_code == 202, b.text
+    assert b.json()["id"] == a.json()["id"]
+    assert b.headers["Idempotent-Replayed"] == "true"
+    assert _count_analyses(client) == 3
+
+
+def test_primary_key_conflict_without_idempotency_key_is_reraised(
+    client, make_key, storage_dir, deferred_worker, monkeypatch
+):
+    from sqlalchemy.exc import IntegrityError
+
+    from src.v2 import analyses
+
+    key = make_key(client, scopes=ALL_SCOPES)
+    dataset_id = _upload(client, key)
+    first = _post(client, key, dataset_id).json()
+    monkeypatch.setattr(analyses, "ULID", lambda: first["id"])  # force a PK clash
+    looked_up = []
+
+    async def spy(*args):
+        looked_up.append(args)
+        return None
+
+    monkeypatch.setattr(analyses, "_find_idempotent", spy)
+    with pytest.raises(IntegrityError):
+        _post(client, key, dataset_id)
+    assert looked_up == []
+
+
+def test_janitor_honours_explicit_zero_thresholds(
+    client, make_key, storage_dir, deferred_worker, monkeypatch
+):
+    from src.v2.analyses import reap_stuck_analyses
+
+    key = make_key(client, scopes=ALL_SCOPES)
+    created = _post(client, key, _upload(client, key)).json()
+    now = datetime.now(timezone.utc)
+    just_now = now - timedelta(seconds=1)
+    _update_analysis(client, created["id"], status="running", started_at=just_now,
+                     last_progress_at=just_now)
+    factory = client.app.state.test_session_factory
+    # Defaults (30 / 5 minutes) leave it alone; explicit zeros reap it.
+    assert asyncio.run(reap_stuck_analyses(factory, now=now)) == []
+    assert asyncio.run(reap_stuck_analyses(
+        factory, now=now, max_runtime_minutes=0, stale_after_minutes=0)) == [created["id"]]
+
+    monkeypatch.setenv("RABBIT_ANALYSIS_MAX_RUNTIME_MINUTES", "0")
+    monkeypatch.setenv("RABBIT_ANALYSIS_STALE_PROGRESS_MINUTES", "0")
+    from src.v2.analyses import janitor_settings
+
+    assert janitor_settings() == (0, 0)
