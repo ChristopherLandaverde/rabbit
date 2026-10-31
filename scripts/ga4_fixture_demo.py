@@ -21,7 +21,7 @@ if __name__ == "__main__":
         "--project", "demo-project-123",
         "--dataset", "analytics_123456789",
         "--start", "20240301",
-        "--end", "20240303",
+        "--end", "20240315",
         "--conversion-event", "purchase",
         "--out", "ga4_touchpoints.csv",
     ]

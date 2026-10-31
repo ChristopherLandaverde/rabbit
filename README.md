@@ -103,42 +103,44 @@ If your GA4 property exports to BigQuery, Rabbit can read the export directly in
 
 ```bash
 python -m src.importers.ga4_bigquery --project my-gcp-project --dataset analytics_123456789 \
-  --start 20240301 --end 20240303 --conversion-event purchase --out ga4_touchpoints.csv
+  --start 20240301 --end 20240315 --conversion-event purchase --out ga4_touchpoints.csv
 ```
 
 - **Credentials** come from Application Default Credentials on the machine that runs the importer (`gcloud auth application-default login`, or `GOOGLE_APPLICATION_CREDENTIALS`). Rabbit never takes Google credentials in an HTTP request, and never stores or logs them. There is no API endpoint for this yet; it runs as a local CLI or Python function (`import_ga4`).
-- **Scope:** `https://www.googleapis.com/auth/cloud-platform.read-only`. Google's BigQuery API documents don't accept the narrower `bigquery.readonly` for running queries, so the importer uses the narrowest scope they do accept, and runs one `SELECT` through `jobs.query`. It never writes.
+- **Scope:** `https://www.googleapis.com/auth/cloud-platform.read-only` by default. Google's BigQuery API discovery document (revision 20260811) doesn't list the narrower `bigquery.readonly` for running queries, though third-party reports say it works; `--oauth-scope bigquery.readonly` requests it so a first live run can check. The importer sends one `SELECT` through `jobs.query` and never writes.
 - **Roles:** BigQuery Data Viewer on the export dataset and BigQuery Job User on the project that pays for the query.
-- **Cost:** the query is billed to your GCP project (`--billing-project`, default `--project`) at BigQuery's on-demand rate. `--start` and `--end` are required, the query reads only the columns it needs from those days' tables, and every run does a free dry run first and prints the bytes it will process. Above `--max-bytes` (default 10 GiB) it stops before running anything billable; the real query also sets BigQuery's `maximum_bytes_billed` to the same limit.
+- **Cost:** the query is billed to your GCP project (`--billing-project`, default `--project`) at BigQuery's on-demand rate, with a minimum of 10 MB per daily table read. `--start` and `--end` are required, and the query reads only the columns it needs from those days' tables. Every run does a free dry run first and prints the bytes it will process. Above `--max-bytes` (default 10 GiB) it stops before running anything billable (exit 3); the real query also sets BigQuery's `maximum_bytes_billed` to the same limit (exit 4 if BigQuery refuses it).
+- **Channel** is GA4's own session source/medium: UTM tags, then a `gclid` as `google / cpc`, then GA4's last non-direct click. Untagged sessions therefore take the visitor's last non-direct source, as they do in GA4's reports, so `direct` is undercounted and an earlier source can repeat as a touch.
 
 Output from `python scripts/ga4_fixture_demo.py`, which runs the same CLI on the fixture rows (the 50 MiB estimate is the stand-in client's fixed number):
 
 ```text
-Dry run: this query will process 50.00 MiB (52428800 bytes); limit --max-bytes 10.00 GiB.
-Read 11 export rows: 8 session_start touchpoints and 3 'purchase' conversions for 4 customers.
-Channel source: 4 collected_traffic_source, 4 session_traffic_source_last_click, 1 event params, 2 direct ((not set) or null).
-Wrote 11 touchpoints to ga4_touchpoints.csv.
+Dry run: this query will process 50.00 MiB (52428800 bytes) from 5 daily tables; limit --max-bytes 10.00 GiB. On-demand billing charges at least 10 MB per table (50.00 MiB here).
+Read 16 export rows: 12 session_start touchpoints and 4 'purchase' conversions for 6 customers; 0 rows skipped with no user id (e.g. consent-denied traffic).
+Channel source: 4 UTM tags, 2 gclid (google / cpc), 7 GA4 last non-direct click, 1 event params (pre-2024 export), 2 direct.
+Untagged sessions take GA4's last non-direct session source, as in GA4's session source/medium, so direct is undercounted and a returning visitor's earlier source can repeat as a touch.
+Wrote 16 touchpoints to ga4_touchpoints.csv.
 Run any model on this file; its credits describe association under the named model, not causal impact.
 ```
 
 That file through the quick-start loop (`-F 'file=@ga4_touchpoints.csv'`), percent of credit per channel under each model:
 
 ```text
-first_touch    {"google / cpc":33,"direct":67}
-last_touch     {"newsletter / email":67,"google / organic":33}
-linear         {"google / cpc":11,"newsletter / email":39,"direct":19,"google / organic":22,"facebook / social":8}
-time_decay     {"google / cpc":10,"newsletter / email":41,"direct":18,"google / organic":23,"facebook / social":8}
-position_based {"google / cpc":13,"newsletter / email":37,"direct":27,"google / organic":20,"facebook / social":3}
+first_touch    {"google / cpc":25,"google / organic":25,"newsletter / email":25,"direct":25}
+last_touch     {"newsletter / email":50,"google / organic":25,"google / cpc":25}
+linear         {"google / cpc":21,"newsletter / email":42,"google / organic":25,"direct":6,"facebook / social":6}
+time_decay     {"google / cpc":26,"newsletter / email":38,"google / organic":25,"direct":5,"facebook / social":6}
+position_based {"google / cpc":23,"newsletter / email":40,"google / organic":25,"direct":10,"facebook / social":2}
 ```
 
-The field mapping (customer id, channel fallbacks, `(not set)` to `direct`, conversion value) and its limits are in [docs/importers/ga4-bigquery.md](docs/importers/ga4-bigquery.md).
+The field mapping, exit codes and limits (time zones, journeys cut at `--start`, the last ~72 hours still changing, consent-denied traffic) are in [docs/importers/ga4-bigquery.md](docs/importers/ga4-bigquery.md).
 
 ## Known limits
 
 - **Credit is association, not causation.** The `insights` block in each response (for example "Increase budget allocation to email by 20-30%") is generated by fixed rules from the credit shares and sample size. Treat it as a prompt for investigation, not a recommendation backed by an experiment.
 - **One model per v1 request.** On the supported v1 API, comparing models means one request per model, as in the quick start. The experimental v2 API can run up to five models in one analysis and return a comparison block (see [Status](#status)).
 - **Rule-based models only.** No data-driven (Markov, Shapley) model, no cross-device stitching beyond the identifier columns in the CSV (or GA4 `user_id`, for the importer), no ad-platform connectors.
-- **The GA4 importer is fixture-verified only.** It reads `session_start` and one conversion event, uses source/medium rather than GA4's channel grouping, and has not been run against a real export. See [its limits](docs/importers/ga4-bigquery.md#known-limits).
+- **The GA4 importer is fixture-verified only.** It reads `session_start` and one conversion event, follows GA4's last non-direct session source for untagged sessions, skips consent-denied traffic, and has not been run against a real export. See [its limits](docs/importers/ga4-bigquery.md#known-limits).
 - **Redis is optional but reported.** Without Redis on `localhost:6379`, analysis still works but `/health` returns HTTP 200 with `"status": "unhealthy"`.
 - **Not deployed or published.** There is no hosted instance and no package; run it locally.
 - **Frontend and Docker are not the supported path.** The React app in `frontend/` builds in CI, and Docker Compose files exist, but neither was verified for this README.

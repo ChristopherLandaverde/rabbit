@@ -42,9 +42,9 @@
   "session_traffic_source_last_click": {
    "manual_campaign": {
     "campaign_id": null,
-    "campaign_name": "spring_sale",
-    "source": "google",
-    "medium": "cpc",
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
     "term": null,
     "content": null,
     "source_platform": null,
@@ -52,7 +52,18 @@
     "marketing_tactic": null
    },
    "google_ads_campaign": null,
-   "cross_channel_campaign": null
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "spring_sale",
+    "source": "google",
+    "medium": "cpc",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
   },
   "ecommerce": {
    "total_item_quantity": null,
@@ -94,13 +105,26 @@
     }
    }
   ],
-  "collected_traffic_source": null,
+  "collected_traffic_source": {
+   "manual_campaign_id": null,
+   "manual_campaign_name": "march_news",
+   "manual_source": "newsletter",
+   "manual_medium": "email",
+   "manual_term": null,
+   "manual_content": null,
+   "manual_source_platform": null,
+   "manual_creative_format": null,
+   "manual_marketing_tactic": null,
+   "gclid": null,
+   "dclid": null,
+   "srsltid": null
+  },
   "session_traffic_source_last_click": {
    "manual_campaign": {
     "campaign_id": null,
-    "campaign_name": "march_news",
-    "source": "newsletter",
-    "medium": "email",
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
     "term": null,
     "content": null,
     "source_platform": null,
@@ -108,7 +132,18 @@
     "marketing_tactic": null
    },
    "google_ads_campaign": null,
-   "cross_channel_campaign": null
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "march_news",
+    "source": "newsletter",
+    "medium": "email",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
   },
   "ecommerce": {
    "total_item_quantity": null,
@@ -172,9 +207,9 @@
   "session_traffic_source_last_click": {
    "manual_campaign": {
     "campaign_id": null,
-    "campaign_name": "march_news",
-    "source": "newsletter",
-    "medium": "email",
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
     "term": null,
     "content": null,
     "source_platform": null,
@@ -182,7 +217,18 @@
     "marketing_tactic": null
    },
    "google_ads_campaign": null,
-   "cross_channel_campaign": null
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "march_news",
+    "source": "newsletter",
+    "medium": "email",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
   },
   "ecommerce": {
    "total_item_quantity": null,
@@ -224,26 +270,13 @@
     }
    }
   ],
-  "collected_traffic_source": {
-   "manual_campaign_id": null,
-   "manual_campaign_name": null,
-   "manual_source": "(direct)",
-   "manual_medium": "(none)",
-   "manual_term": null,
-   "manual_content": null,
-   "manual_source_platform": null,
-   "manual_creative_format": null,
-   "manual_marketing_tactic": null,
-   "gclid": null,
-   "dclid": null,
-   "srsltid": null
-  },
+  "collected_traffic_source": null,
   "session_traffic_source_last_click": {
    "manual_campaign": {
     "campaign_id": null,
-    "campaign_name": "(not set)",
-    "source": "(not set)",
-    "medium": "(not set)",
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
     "term": null,
     "content": null,
     "source_platform": null,
@@ -251,7 +284,18 @@
     "marketing_tactic": null
    },
    "google_ads_campaign": null,
-   "cross_channel_campaign": null
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "(not set)",
+    "source": "(direct)",
+    "medium": "(none)",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
   },
   "ecommerce": {
    "total_item_quantity": null,
@@ -320,6 +364,8 @@
     }
    }
   ],
+  "collected_traffic_source": null,
+  "session_traffic_source_last_click": null,
   "ecommerce": {
    "total_item_quantity": null,
    "purchase_revenue_in_usd": null,
@@ -377,9 +423,9 @@
   "session_traffic_source_last_click": {
    "manual_campaign": {
     "campaign_id": null,
-    "campaign_name": "march_news",
-    "source": "newsletter",
-    "medium": "email",
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
     "term": null,
     "content": null,
     "source_platform": null,
@@ -387,7 +433,18 @@
     "marketing_tactic": null
    },
    "google_ads_campaign": null,
-   "cross_channel_campaign": null
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "march_news",
+    "source": "newsletter",
+    "medium": "email",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
   },
   "ecommerce": {
    "total_item_quantity": null,
@@ -451,9 +508,9 @@
   "session_traffic_source_last_click": {
    "manual_campaign": {
     "campaign_id": null,
-    "campaign_name": "march_news",
-    "source": "newsletter",
-    "medium": "email",
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
     "term": null,
     "content": null,
     "source_platform": null,
@@ -461,7 +518,18 @@
     "marketing_tactic": null
    },
    "google_ads_campaign": null,
-   "cross_channel_campaign": null
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "march_news",
+    "source": "newsletter",
+    "medium": "email",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
   },
   "ecommerce": {
    "total_item_quantity": null,
@@ -504,7 +572,32 @@
    }
   ],
   "collected_traffic_source": null,
-  "session_traffic_source_last_click": null,
+  "session_traffic_source_last_click": {
+   "manual_campaign": {
+    "campaign_id": null,
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
+    "term": null,
+    "content": null,
+    "source_platform": null,
+    "creative_format": null,
+    "marketing_tactic": null
+   },
+   "google_ads_campaign": null,
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "(not set)",
+    "source": "google",
+    "medium": "organic",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
+  },
   "ecommerce": {
    "total_item_quantity": null,
    "purchase_revenue_in_usd": null,
@@ -545,26 +638,13 @@
     }
    }
   ],
-  "collected_traffic_source": {
-   "manual_campaign_id": null,
-   "manual_campaign_name": null,
-   "manual_source": "google",
-   "manual_medium": "organic",
-   "manual_term": null,
-   "manual_content": null,
-   "manual_source_platform": null,
-   "manual_creative_format": null,
-   "manual_marketing_tactic": null,
-   "gclid": null,
-   "dclid": null,
-   "srsltid": null
-  },
+  "collected_traffic_source": null,
   "session_traffic_source_last_click": {
    "manual_campaign": {
     "campaign_id": null,
     "campaign_name": null,
-    "source": "google",
-    "medium": "organic",
+    "source": null,
+    "medium": null,
     "term": null,
     "content": null,
     "source_platform": null,
@@ -572,7 +652,18 @@
     "marketing_tactic": null
    },
    "google_ads_campaign": null,
-   "cross_channel_campaign": null
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "(not set)",
+    "source": "google",
+    "medium": "organic",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
   },
   "ecommerce": {
    "total_item_quantity": null,
@@ -619,13 +710,13 @@
      "string_value": null,
      "int_value": null,
      "float_value": null,
-     "double_value": 999.0
+     "double_value": 75.0
     }
    },
    {
     "key": "currency",
     "value": {
-     "string_value": "USD",
+     "string_value": "EUR",
      "int_value": null,
      "float_value": null,
      "double_value": null
@@ -637,8 +728,8 @@
    "manual_campaign": {
     "campaign_id": null,
     "campaign_name": null,
-    "source": "google",
-    "medium": "organic",
+    "source": null,
+    "medium": null,
     "term": null,
     "content": null,
     "source_platform": null,
@@ -646,11 +737,22 @@
     "marketing_tactic": null
    },
    "google_ads_campaign": null,
-   "cross_channel_campaign": null
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "(not set)",
+    "source": "google",
+    "medium": "organic",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
   },
   "ecommerce": {
    "total_item_quantity": null,
-   "purchase_revenue_in_usd": 75.0,
+   "purchase_revenue_in_usd": 81.0,
    "purchase_revenue": 75.0,
    "refund_value_in_usd": null,
    "refund_value": null,
@@ -690,9 +792,163 @@
   ],
   "collected_traffic_source": {
    "manual_campaign_id": null,
-   "manual_campaign_name": "brand",
-   "manual_source": "bing",
-   "manual_medium": "cpc",
+   "manual_campaign_name": null,
+   "manual_source": null,
+   "manual_medium": null,
+   "manual_term": null,
+   "manual_content": null,
+   "manual_source_platform": null,
+   "manual_creative_format": null,
+   "manual_marketing_tactic": null,
+   "gclid": "made_up_gclid_0001",
+   "dclid": null,
+   "srsltid": null
+  },
+  "session_traffic_source_last_click": {
+   "manual_campaign": {
+    "campaign_id": null,
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
+    "term": null,
+    "content": null,
+    "source_platform": null,
+    "creative_format": null,
+    "marketing_tactic": null
+   },
+   "google_ads_campaign": {
+    "customer_id": "000-000-0000",
+    "account_name": "Made-up Ads account",
+    "campaign_id": "111",
+    "campaign_name": "brand_search",
+    "ad_group_id": "222",
+    "ad_group_name": "brand"
+   },
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "brand_search",
+    "source": "google",
+    "medium": "cpc",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
+  },
+  "ecommerce": {
+   "total_item_quantity": null,
+   "purchase_revenue_in_usd": null,
+   "purchase_revenue": null,
+   "refund_value_in_usd": null,
+   "refund_value": null,
+   "shipping_value_in_usd": null,
+   "shipping_value": null,
+   "tax_value_in_usd": null,
+   "tax_value": null,
+   "unique_items": null,
+   "transaction_id": null
+  }
+ },
+ {
+  "event_date": "20240302",
+  "event_timestamp": 1709409600000000,
+  "event_name": "session_start",
+  "user_pseudo_id": "7000000007.1709340000",
+  "user_id": null,
+  "event_params": [
+   {
+    "key": "ga_session_id",
+    "value": {
+     "string_value": null,
+     "int_value": 1709409600,
+     "float_value": null,
+     "double_value": null
+    }
+   },
+   {
+    "key": "ga_session_number",
+    "value": {
+     "string_value": null,
+     "int_value": 1,
+     "float_value": null,
+     "double_value": null
+    }
+   }
+  ],
+  "collected_traffic_source": null,
+  "session_traffic_source_last_click": {
+   "manual_campaign": {
+    "campaign_id": null,
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
+    "term": null,
+    "content": null,
+    "source_platform": null,
+    "creative_format": null,
+    "marketing_tactic": null
+   },
+   "google_ads_campaign": null,
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "(not set)",
+    "source": "(not set)",
+    "medium": "(not set)",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
+  },
+  "ecommerce": {
+   "total_item_quantity": null,
+   "purchase_revenue_in_usd": null,
+   "purchase_revenue": null,
+   "refund_value_in_usd": null,
+   "refund_value": null,
+   "shipping_value_in_usd": null,
+   "shipping_value": null,
+   "tax_value_in_usd": null,
+   "tax_value": null,
+   "unique_items": null,
+   "transaction_id": null
+  }
+ },
+ {
+  "event_date": "20240301",
+  "event_timestamp": 1709251200000000,
+  "event_name": "session_start",
+  "user_pseudo_id": "6000000006.1709330000",
+  "user_id": null,
+  "event_params": [
+   {
+    "key": "ga_session_id",
+    "value": {
+     "string_value": null,
+     "int_value": 1709251200,
+     "float_value": null,
+     "double_value": null
+    }
+   },
+   {
+    "key": "ga_session_number",
+    "value": {
+     "string_value": null,
+     "int_value": 1,
+     "float_value": null,
+     "double_value": null
+    }
+   }
+  ],
+  "collected_traffic_source": {
+   "manual_campaign_id": null,
+   "manual_campaign_name": "march_news",
+   "manual_source": "newsletter",
+   "manual_medium": "email",
    "manual_term": null,
    "manual_content": null,
    "manual_source_platform": null,
@@ -705,9 +961,9 @@
   "session_traffic_source_last_click": {
    "manual_campaign": {
     "campaign_id": null,
-    "campaign_name": "brand",
-    "source": "bing",
-    "medium": "cpc",
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
     "term": null,
     "content": null,
     "source_platform": null,
@@ -715,12 +971,269 @@
     "marketing_tactic": null
    },
    "google_ads_campaign": null,
-   "cross_channel_campaign": null
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "march_news",
+    "source": "newsletter",
+    "medium": "email",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
   },
   "ecommerce": {
    "total_item_quantity": null,
    "purchase_revenue_in_usd": null,
    "purchase_revenue": null,
+   "refund_value_in_usd": null,
+   "refund_value": null,
+   "shipping_value_in_usd": null,
+   "shipping_value": null,
+   "tax_value_in_usd": null,
+   "tax_value": null,
+   "unique_items": null,
+   "transaction_id": null
+  }
+ },
+ {
+  "event_date": "20240308",
+  "event_timestamp": 1709856000000000,
+  "event_name": "session_start",
+  "user_pseudo_id": "6000000006.1709330000",
+  "user_id": null,
+  "event_params": [
+   {
+    "key": "ga_session_id",
+    "value": {
+     "string_value": null,
+     "int_value": 1709856000,
+     "float_value": null,
+     "double_value": null
+    }
+   },
+   {
+    "key": "ga_session_number",
+    "value": {
+     "string_value": null,
+     "int_value": 1,
+     "float_value": null,
+     "double_value": null
+    }
+   }
+  ],
+  "collected_traffic_source": null,
+  "session_traffic_source_last_click": {
+   "manual_campaign": {
+    "campaign_id": null,
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
+    "term": null,
+    "content": null,
+    "source_platform": null,
+    "creative_format": null,
+    "marketing_tactic": null
+   },
+   "google_ads_campaign": null,
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "march_news",
+    "source": "newsletter",
+    "medium": "email",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
+  },
+  "ecommerce": {
+   "total_item_quantity": null,
+   "purchase_revenue_in_usd": null,
+   "purchase_revenue": null,
+   "refund_value_in_usd": null,
+   "refund_value": null,
+   "shipping_value_in_usd": null,
+   "shipping_value": null,
+   "tax_value_in_usd": null,
+   "tax_value": null,
+   "unique_items": null,
+   "transaction_id": null
+  }
+ },
+ {
+  "event_date": "20240315",
+  "event_timestamp": 1710460800000000,
+  "event_name": "session_start",
+  "user_pseudo_id": "6000000006.1709330000",
+  "user_id": null,
+  "event_params": [
+   {
+    "key": "ga_session_id",
+    "value": {
+     "string_value": null,
+     "int_value": 1710460800,
+     "float_value": null,
+     "double_value": null
+    }
+   },
+   {
+    "key": "ga_session_number",
+    "value": {
+     "string_value": null,
+     "int_value": 1,
+     "float_value": null,
+     "double_value": null
+    }
+   }
+  ],
+  "collected_traffic_source": {
+   "manual_campaign_id": null,
+   "manual_campaign_name": null,
+   "manual_source": null,
+   "manual_medium": null,
+   "manual_term": null,
+   "manual_content": null,
+   "manual_source_platform": null,
+   "manual_creative_format": null,
+   "manual_marketing_tactic": null,
+   "gclid": "made_up_gclid_0002",
+   "dclid": null,
+   "srsltid": null
+  },
+  "session_traffic_source_last_click": {
+   "manual_campaign": {
+    "campaign_id": null,
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
+    "term": null,
+    "content": null,
+    "source_platform": null,
+    "creative_format": null,
+    "marketing_tactic": null
+   },
+   "google_ads_campaign": {
+    "customer_id": "000-000-0000",
+    "account_name": "Made-up Ads account",
+    "campaign_id": "111",
+    "campaign_name": "brand_search",
+    "ad_group_id": "222",
+    "ad_group_name": "brand"
+   },
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "brand_search",
+    "source": "google",
+    "medium": "cpc",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
+  },
+  "ecommerce": {
+   "total_item_quantity": null,
+   "purchase_revenue_in_usd": null,
+   "purchase_revenue": null,
+   "refund_value_in_usd": null,
+   "refund_value": null,
+   "shipping_value_in_usd": null,
+   "shipping_value": null,
+   "tax_value_in_usd": null,
+   "tax_value": null,
+   "unique_items": null,
+   "transaction_id": null
+  }
+ },
+ {
+  "event_date": "20240315",
+  "event_timestamp": 1710460800000000,
+  "event_name": "purchase",
+  "user_pseudo_id": "6000000006.1709330000",
+  "user_id": null,
+  "event_params": [
+   {
+    "key": "ga_session_id",
+    "value": {
+     "string_value": null,
+     "int_value": 1710460800,
+     "float_value": null,
+     "double_value": null
+    }
+   },
+   {
+    "key": "ga_session_number",
+    "value": {
+     "string_value": null,
+     "int_value": 1,
+     "float_value": null,
+     "double_value": null
+    }
+   },
+   {
+    "key": "value",
+    "value": {
+     "string_value": null,
+     "int_value": null,
+     "float_value": null,
+     "double_value": 100.0
+    }
+   },
+   {
+    "key": "currency",
+    "value": {
+     "string_value": "USD",
+     "int_value": null,
+     "float_value": null,
+     "double_value": null
+    }
+   }
+  ],
+  "collected_traffic_source": null,
+  "session_traffic_source_last_click": {
+   "manual_campaign": {
+    "campaign_id": null,
+    "campaign_name": null,
+    "source": null,
+    "medium": null,
+    "term": null,
+    "content": null,
+    "source_platform": null,
+    "creative_format": null,
+    "marketing_tactic": null
+   },
+   "google_ads_campaign": {
+    "customer_id": "000-000-0000",
+    "account_name": "Made-up Ads account",
+    "campaign_id": "111",
+    "campaign_name": "brand_search",
+    "ad_group_id": "222",
+    "ad_group_name": "brand"
+   },
+   "cross_channel_campaign": {
+    "campaign_id": null,
+    "campaign_name": "brand_search",
+    "source": "google",
+    "medium": "cpc",
+    "source_platform": null,
+    "default_channel_group": null,
+    "primary_channel_group": null
+   },
+   "sa360_campaign": null,
+   "cm360_campaign": null,
+   "dv360_campaign": null
+  },
+  "ecommerce": {
+   "total_item_quantity": null,
+   "purchase_revenue_in_usd": 100.0,
+   "purchase_revenue": 100.0,
    "refund_value_in_usd": null,
    "refund_value": null,
    "shipping_value_in_usd": null,

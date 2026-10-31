@@ -23,13 +23,13 @@ FIVE_MODELS = ["first_touch", "last_touch", "linear", "time_decay", "position_ba
 def _import(client=None, **kwargs):
     client = client or FakeBigQueryClient()
     params = dict(project="demo-project-123", dataset="analytics_123456789",
-                  start="20240301", end="20240303", conversion_event="purchase")
+                  start="20240301", end="20240315", conversion_event="purchase")
     params.update(kwargs)
     return ga4.import_ga4(client=client, **params), client
 
 
 def _by_key(frame):
-    return {(row.customer_id, row.timestamp[:19]): row for row in frame.itertuples()}
+    return {(row.customer_id, row.timestamp[:19], row.event_type): row for row in frame.itertuples()}
 
 
 # --- mapping -----------------------------------------------------------------
@@ -40,98 +40,130 @@ def test_mapping_matches_hand_built_touchpoints():
     frame = result.frame
     expected = pd.read_csv(EQUIVALENT_CSV, dtype=str, keep_default_na=False)
     assert list(frame.columns) == ga4.TOUCHPOINT_COLUMNS
-    assert len(frame) == len(expected) == 11
+    assert len(frame) == len(expected) == 16
     got = _by_key(frame)
     for row in expected.itertuples():
-        actual = got[(row.customer_id, row.timestamp)]
-        assert actual.channel == row.channel
-        assert actual.event_type == row.event_type
+        actual = got[(row.customer_id, row.timestamp, row.event_type)]
+        assert actual.channel == row.channel, row
         assert actual.session_id == row.session_id
-        assert (actual.campaign_id or "") == row.campaign_id
+        assert (actual.campaign_id or "") == row.campaign_id, row
         value = actual.conversion_value
         assert ("" if value is None or pd.isna(value) else float(value)) == (
             float(row.conversion_value) if row.conversion_value else "")
-    assert result.source_rows == 11
+    assert result.source_rows == 16
     assert result.stats == {
-        "session_starts": 8, "conversions": 3, "skipped_no_identity": 0,
+        "session_starts": 12, "conversions": 4, "skipped_no_identity": 0,
         "skipped_other_event": 0,
-        "channel_from_collected_traffic_source": 4,
-        "channel_from_session_traffic_source_last_click": 4,
-        "channel_from_event_params": 1, "channel_direct": 2,
+        "channel_from_collected_utm": 4,
+        "channel_from_collected_gclid": 2,
+        "channel_from_last_non_direct_click": 7,
+        "channel_from_event_params": 1,
+        "channel_direct": 2,
     }
 
 
-def test_not_set_and_null_sources_map_to_direct():
+def _mapped():
     frame, _ = ga4.rows_to_touchpoints(load_rows(), "purchase")
-    got = _by_key(frame)
-    # (direct)/(none) collected source and (not set) last-click source.
-    assert got[("u_madeup_0007", "2024-03-01 12:00:00")].channel == "direct"
-    # Both traffic-source records null and no source params.
-    assert got[("4000000004.1709310000", "2024-03-01 15:00:00")].channel == "direct"
+    return _by_key(frame)
+
+
+def test_not_set_and_null_sources_map_to_direct():
+    got = _mapped()
+    # Last click (direct)/(none): a first visit with no earlier source.
+    assert got[("user:u_madeup_0007", "2024-03-01 12:00:00", "view")].channel == "direct"
+    # Last click (not set)/(not set).
+    assert got[("ga4:7000000007.1709340000", "2024-03-02 20:00:00", "view")].channel == "direct"
     for unset in [None, "", "(not set)", "(none)", "(direct)", "  (not set) "]:
-        row = {"event_params": [{"key": "source", "value": {"string_value": unset}}]}
-        assert ga4.channel_name(*ga4.traffic_source(row)[:2]) == "direct"
+        row = {"collected_traffic_source": {"manual_source": unset},
+               "session_traffic_source_last_click": {"cross_channel_campaign": {"source": unset}}}
+        assert ga4.traffic_source(row) == (None, None, None, "direct")
+        old = {"event_params": [{"key": "source", "value": {"string_value": unset}}]}
+        assert ga4.channel_name(*ga4.traffic_source(old)[:2]) == "direct"
 
 
-def test_channel_fallback_order():
+def test_untagged_sessions_follow_ga4_last_non_direct_click():
+    got = _mapped()
+    # Untagged organic: nothing collected, source from last click.
+    assert got[("ga4:4000000004.1709310000", "2024-03-01 15:00:00", "view")].channel == "google / organic"
+    # Direct return visit inherits the earlier source, as in GA4's session source.
+    assert got[("ga4:4000000004.1709310000", "2024-03-02 15:00:00", "view")].channel == "google / organic"
+    assert got[("ga4:6000000006.1709330000", "2024-03-08 00:00:00", "view")].channel == "newsletter / email"
+
+
+def test_gclid_only_session_is_google_cpc_with_ads_campaign():
+    got = _mapped()
+    touch = got[("ga4:5000000005.1709320000", "2024-03-03 11:00:00", "view")]
+    assert (touch.channel, touch.campaign_id) == ("google / cpc", "brand_search")
+    bare = {"collected_traffic_source": {"gclid": "x"}, "session_traffic_source_last_click": None}
+    assert ga4.traffic_source(bare) == ("google", "cpc", None, "collected_gclid")
+
+
+def test_channel_precedence():
     def row(collected=None, last=None, params=()):
         return {
             "collected_traffic_source": collected,
-            "session_traffic_source_last_click": {"manual_campaign": last} if last else None,
+            "session_traffic_source_last_click": last,
             "event_params": [{"key": k, "value": {"string_value": v}} for k, v in params],
         }
 
-    both = row({"manual_source": "google", "manual_medium": "cpc"},
-               {"source": "bing", "medium": "cpc"}, [("source", "x"), ("medium", "y")])
-    assert ga4.traffic_source(both)[3] == "collected_traffic_source"
-    assert ga4.channel_name(*ga4.traffic_source(both)[:2]) == "google / cpc"
-    last = row({"manual_source": "(not set)"}, {"source": "bing", "medium": "cpc",
-                                                "campaign_name": "brand"})
-    assert ga4.traffic_source(last) == ("bing", "cpc", "brand", "session_traffic_source_last_click")
-    params = row(None, None, [("source", "Facebook"), ("medium", "Social"), ("campaign", "q1")])
-    assert ga4.traffic_source(params) == ("Facebook", "Social", "q1", "event_params")
-    assert ga4.channel_name("Facebook", "Social") == "facebook / social"
+    last = {"cross_channel_campaign": {"source": "bing", "medium": "cpc", "campaign_name": "brand"},
+            "google_ads_campaign": {"campaign_name": "ads_campaign"}}
+    params = [("source", "x"), ("medium", "y")]
+    # UTM beats gclid, last click and params.
+    utm = row({"manual_source": "Newsletter", "manual_medium": "Email", "gclid": "g"}, last, params)
+    assert ga4.traffic_source(utm)[3] == "collected_utm"
+    assert ga4.channel_name(*ga4.traffic_source(utm)[:2]) == "newsletter / email"
+    # gclid beats last click.
+    assert ga4.traffic_source(row({"gclid": "g"}, last, params)) == (
+        "google", "cpc", "ads_campaign", "collected_gclid")
+    # Last click beats params; a present last-click record with no source is direct.
+    assert ga4.traffic_source(row(None, last, params)) == ("bing", "cpc", "brand", "last_non_direct_click")
+    assert ga4.traffic_source(row(None, {"cross_channel_campaign": None}, params))[3] == "direct"
+    # Params only when the row has no last-click record (pre-2024 export).
+    assert ga4.traffic_source(row(None, None, [("source", "Facebook"), ("medium", "Social"),
+                                               ("campaign", "q1")])) == (
+        "Facebook", "Social", "q1", "event_params")
     assert ga4.channel_name("newsletter", None) == "newsletter"
-    # Older exports have no traffic-source columns at all.
-    frame, stats = ga4.rows_to_touchpoints(load_rows(), "purchase")
-    assert _by_key(frame)[("u_madeup_0007", "2024-03-02 08:00:00")].channel == "facebook / social"
-    assert stats["channel_from_event_params"] == 1
+    got = _mapped()
+    assert got[("user:u_madeup_0007", "2024-03-02 08:00:00", "view")].channel == "facebook / social"
 
 
-def test_conversion_value_prefers_purchase_revenue_then_value_param():
-    frame, _ = ga4.rows_to_touchpoints(load_rows(), "purchase")
-    got = _by_key(frame)
-    # ecommerce.purchase_revenue = 75.0 wins over value param 999.0.
-    assert got[("4000000004.1709310000", "2024-03-02 15:10:00")].conversion_value == 75.0
-    # purchase_revenue null -> value param 49.99.
-    assert got[("u_madeup_0007", "2024-03-03 18:05:00")].conversion_value == 49.99
-    assert got[("1000000001.1709280000", "2024-03-02 09:20:00")].conversion_value == 120.5
+def test_conversion_value_prefers_usd_then_revenue_then_value_param():
+    got = _mapped()
+    # purchase_revenue_in_usd 81.0 beats purchase_revenue 75.0 (EUR) and value 75.0.
+    assert got[("ga4:4000000004.1709310000", "2024-03-02 15:10:00", "conversion")].conversion_value == 81.0
+    # No ecommerce revenue -> value param 49.99.
+    assert got[("user:u_madeup_0007", "2024-03-03 18:05:00", "conversion")].conversion_value == 49.99
+    assert got[("ga4:1000000001.1709280000", "2024-03-02 09:20:00", "conversion")].conversion_value == 120.5
+    assert ga4.conversion_value({"ecommerce": {"purchase_revenue": 7.5}}) == 7.5
     int_param = {"ecommerce": None, "event_params": [{"key": "value", "value": {"int_value": 12}}]}
     assert ga4.conversion_value(int_param) == 12.0
-    assert ga4.conversion_value({"ecommerce": {"purchase_revenue": -5.0}}) is None
+    assert ga4.conversion_value({"ecommerce": {"purchase_revenue_in_usd": -5.0}}) is None
     assert ga4.conversion_value({"ecommerce": None, "event_params": []}) is None
-    # Non-conversion touchpoints never carry a value.
+    frame, _ = ga4.rows_to_touchpoints(load_rows(), "purchase")
     assert frame.loc[frame.event_type == "view", "conversion_value"].isna().all()
 
 
 def test_user_id_joins_devices_and_falls_back_to_pseudo_id():
     frame, _ = ga4.rows_to_touchpoints(load_rows(), "purchase")
     assert sorted(frame.customer_id.unique()) == [
-        "1000000001.1709280000", "4000000004.1709310000",
-        "5000000005.1709320000", "u_madeup_0007",
+        "ga4:1000000001.1709280000", "ga4:4000000004.1709310000", "ga4:5000000005.1709320000",
+        "ga4:6000000006.1709330000", "ga4:7000000007.1709340000", "user:u_madeup_0007",
     ]
-    assert (frame.customer_id == "u_madeup_0007").sum() == 4
+    # Both devices, including B1's row from before login.
+    assert (frame.customer_id == "user:u_madeup_0007").sum() == 4
 
 
-def test_other_events_and_rows_without_identity_are_skipped():
+def test_other_events_and_consent_denied_rows_are_skipped():
     rows = load_rows() + [
         {"event_timestamp": 1709287300000000, "event_name": "page_view",
          "user_pseudo_id": "1000000001.1709280000", "event_params": []},
+        # Consent mode denied: cookieless ping with no user_pseudo_id.
         {"event_timestamp": 1709287300000000, "event_name": "session_start",
          "user_pseudo_id": None, "user_id": None, "event_params": []},
     ]
     frame, stats = ga4.rows_to_touchpoints(rows, "purchase")
-    assert len(frame) == 11
+    assert len(frame) == 16
     assert stats["skipped_other_event"] == 1
     assert stats["skipped_no_identity"] == 1
 
@@ -140,9 +172,9 @@ def test_custom_conversion_event_name():
     rows = [dict(row, event_name="generate_lead") if row["event_name"] == "purchase" else row
             for row in load_rows()]
     frame, stats = ga4.rows_to_touchpoints(rows, "generate_lead")
-    assert stats["conversions"] == 3
+    assert stats["conversions"] == 4
     frame, stats = ga4.rows_to_touchpoints(rows, "purchase")
-    assert stats["conversions"] == 0 and stats["skipped_other_event"] == 3
+    assert stats["conversions"] == 0 and stats["skipped_other_event"] == 4
 
 
 # --- query, scope and cost guard ----------------------------------------------
@@ -152,6 +184,8 @@ FORBIDDEN = re.compile(
     r"EXECUTE|CALL|EXPORT|LOAD|GRANT|REVOKE)\b",
     re.IGNORECASE,
 )
+CLI_ARGS = ["--project", "demo-project-123", "--dataset", "analytics_123456789",
+            "--start", "20240301", "--end", "20240315", "--conversion-event", "purchase"]
 
 
 def test_generated_sql_is_a_single_select_with_partition_pruning():
@@ -170,6 +204,12 @@ def test_generated_sql_is_a_single_select_with_partition_pruning():
     assert "SELECT *" not in sql
 
 
+def test_schema_comes_from_newest_table_matching_the_wildcard():
+    _, client = _import(end="20240302")
+    # Newest matching table is the intraday one, outside the requested range.
+    assert client.schema_reads == ["demo-project-123.analytics_123456789.events_intraday_20240315"]
+
+
 def test_old_export_without_traffic_source_columns_selects_only_base_columns():
     client = FakeBigQueryClient(columns=ga4.BASE_COLUMNS + ["event_date", "ecommerce"])
     result, client = _import(client)
@@ -177,6 +217,9 @@ def test_old_export_without_traffic_source_columns_selects_only_base_columns():
     assert "collected_traffic_source" not in sql
     assert "session_traffic_source_last_click" not in sql
     assert "ecommerce" in sql
+    # Without last-click records, sessions fall back to event params or direct.
+    assert result.stats["channel_from_last_non_direct_click"] == 0
+    assert result.stats["channel_from_event_params"] == 1
 
 
 def test_dry_run_first_then_query_with_maximum_bytes_billed():
@@ -187,7 +230,7 @@ def test_dry_run_first_then_query_with_maximum_bytes_billed():
     assert real["job_config"].maximum_bytes_billed == 123_456_789
     assert dry["api_method"] == real["api_method"] == "QUERY"  # jobs.query, not jobs.insert
     params = {p.name: p.value for p in real["job_config"].query_parameters}
-    assert params == {"start": "20240301", "end": "20240303", "conversion_event": "purchase"}
+    assert params == {"start": "20240301", "end": "20240315", "conversion_event": "purchase"}
     assert result.estimated_bytes == 52_428_800
 
 
@@ -199,32 +242,72 @@ def test_byte_guard_refuses_when_estimate_exceeds_max_bytes():
     assert len(client.queries) == 1 and client.queries[0]["job_config"].dry_run is True
 
 
+def test_dry_run_without_estimate_is_an_error_not_zero(capsys):
+    client = FakeBigQueryClient(estimated_bytes=None)
+    with pytest.raises(ga4.BigQueryFailed):
+        _import(client)
+    assert len(client.queries) == 1
+    assert ga4.main(CLI_ARGS, client=FakeBigQueryClient(estimated_bytes=None)) == 6
+    assert "no bytes estimate" in capsys.readouterr().err
+
+
 def test_cli_byte_guard_exit_code_and_message(capsys, tmp_path):
     client = FakeBigQueryClient(estimated_bytes=2_000_000)
     out = tmp_path / "t.csv"
-    code = ga4.main(["--project", "demo-project-123", "--dataset", "analytics_123456789",
-                     "--start", "20240301", "--end", "20240303",
-                     "--conversion-event", "purchase", "--max-bytes", "1000000",
-                     "--out", str(out)], client=client)
+    code = ga4.main(CLI_ARGS + ["--max-bytes", "1000000", "--out", str(out)], client=client)
     err = capsys.readouterr().err
     assert code == 3
-    assert "Dry run: this query will process 1.91 MiB (2000000 bytes)" in err
+    assert "Dry run: this query will process 1.91 MiB (2000000 bytes) from 5 daily tables" in err
     assert "Refused:" in err and "Nothing was queried" in err
     assert not out.exists()
     assert len(client.queries) == 1
 
 
-def test_cli_writes_touchpoints_and_states_association(capsys, tmp_path):
+def test_bytes_billed_rejection_maps_to_exit_4(capsys):
+    from google.api_core.exceptions import BadRequest
+
+    error = BadRequest("Query exceeded limit for bytes billed: 1000000. 20971520 or higher required.",
+                       errors=[{"reason": "bytesBilledLimitExceeded"}])
+    client = FakeBigQueryClient(estimated_bytes=10, query_error=error)
+    with pytest.raises(ga4.BytesBilledExceeded):
+        _import(client)
+    code = ga4.main(CLI_ARGS, client=FakeBigQueryClient(estimated_bytes=10, query_error=error))
+    assert code == 4
+    assert "would bill more than --max-bytes" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("error_name, exit_code", [
+    ("Forbidden", 5), ("Unauthorized", 5), ("NotFound", 2), ("InternalServerError", 6),
+])
+def test_bigquery_errors_map_to_exit_codes(error_name, exit_code, capsys):
+    from google.api_core import exceptions
+
+    error = getattr(exceptions, error_name)("made-up failure")
+    code = ga4.main(CLI_ARGS, client=FakeBigQueryClient(query_error=error))
+    assert code == exit_code
+    assert "made-up failure" in capsys.readouterr().err
+
+
+def test_missing_adc_maps_to_access_denied():
+    from google.auth.exceptions import DefaultCredentialsError
+
+    with mock.patch("google.auth.default", side_effect=DefaultCredentialsError("none")):
+        with pytest.raises(ga4.AccessDenied) as excinfo:
+            ga4.make_client("billing-project-1")
+    assert "gcloud auth application-default login" in str(excinfo.value)
+
+
+def test_cli_writes_touchpoints_and_states_meaning(capsys, tmp_path):
     out = tmp_path / "touchpoints.csv"
-    code = ga4.main(["--project", "demo-project-123", "--dataset", "analytics_123456789",
-                     "--start", "20240301", "--end", "20240303",
-                     "--conversion-event", "purchase", "--out", str(out)],
-                    client=FakeBigQueryClient())
+    code = ga4.main(CLI_ARGS + ["--out", str(out)], client=FakeBigQueryClient())
     err = capsys.readouterr().err
     assert code == 0
     assert "Dry run: this query will process 50.00 MiB" in err
+    assert "at least 10 MB per table" in err
+    assert "0 rows skipped with no user id" in err
+    assert "last non-direct session source" in err and "direct is undercounted" in err
     assert "association under the named model, not causal impact" in err
-    assert len(pd.read_csv(out)) == 11
+    assert len(pd.read_csv(out)) == 16
 
 
 def test_start_and_end_are_required(capsys):
@@ -236,9 +319,13 @@ def test_start_and_end_are_required(capsys):
     {"start": "20240305", "end": "20240301"},
     {"start": "2024-03-01"},
     {"end": "20240231"},
+    {"start": "20240301\n"},
     {"dataset": "analytics`; DROP TABLE x; --"},
+    {"dataset": "analytics_1\n"},
     {"project": "Bad Project"},
+    {"project": "demo-project-123\n"},
     {"conversion_event": "purchase' OR '1'='1"},
+    {"conversion_event": "session_start"},
     {"max_bytes": 0},
 ])
 def test_invalid_arguments_are_rejected_before_any_query(kwargs):
@@ -259,8 +346,14 @@ def test_make_client_uses_adc_with_read_only_scope():
     with mock.patch("google.auth.default", return_value=(creds, "adc-project")) as default, \
             mock.patch("google.cloud.bigquery.Client") as client_cls:
         ga4.make_client("billing-project-1")
-    default.assert_called_once_with(scopes=["https://www.googleapis.com/auth/cloud-platform.read-only"])
-    client_cls.assert_called_once_with(project="billing-project-1", credentials=creds)
+        ga4.make_client("billing-project-1", ga4.BIGQUERY_READONLY)
+    assert default.call_args_list == [
+        mock.call(scopes=["https://www.googleapis.com/auth/cloud-platform.read-only"]),
+        mock.call(scopes=["https://www.googleapis.com/auth/bigquery.readonly"]),
+    ]
+    client_cls.assert_called_with(project="billing-project-1", credentials=creds)
+    with pytest.raises(ga4.InvalidArgument):
+        ga4.make_client("billing-project-1", "https://www.googleapis.com/auth/bigquery")
 
 
 # --- equivalence with the CSV upload path --------------------------------------
@@ -288,20 +381,65 @@ def _assert_same(left, right):
                     model, channel, metric)
 
 
+def test_fake_client_returns_real_bigquery_rows():
+    from google.cloud.bigquery.table import Row
+
+    _, client = _import()
+    rows = list(client.query(client.queries[-1]["sql"], job_config=client.queries[-1]["job_config"],
+                             api_method="QUERY").result())
+    assert rows and all(isinstance(row, Row) for row in rows)
+    assert set(rows[0].keys()) == set(ga4.BASE_COLUMNS + ga4.OPTIONAL_COLUMNS)
+
+
 def test_bigquery_import_gives_same_model_outputs_as_equivalent_csv():
     result, _ = _import()
     from_bigquery = _upload_path(result.frame.to_csv(index=False).encode())
     from_csv = _upload_path(EQUIVALENT_CSV.read_bytes())
     _assert_same(from_bigquery, from_csv)
     summary, _ = from_bigquery["linear"]
-    assert summary["total_conversions"] == 3
-    assert summary["total_revenue"] == pytest.approx(245.49)
-    assert summary["journeys"] == 4
+    assert summary["total_conversions"] == 4
+    assert summary["total_revenue"] == pytest.approx(120.5 + 49.99 + 81.0 + 100.0)
+    assert summary["journeys"] == 6
     assert summary["linking_method"] == "customer_id"
-    # The models still disagree on this data, which is the point of comparing them.
     first = from_bigquery["first_touch"][1]["channels"]
     last = from_bigquery["last_touch"][1]["channels"]
     assert first != last
+
+
+# Journey 6000000006: email UTM (Mar 1), direct return that inherits email via
+# last click (Mar 8), gclid session (Mar 15 00:00) and purchase of $100 in that
+# session at the same instant. Channels: email, email, google / cpc, google / cpc.
+#   first_touch:    email 1
+#   last_touch:     google / cpc 1
+#   linear:         4 touches x 1/4 -> email 1/2, cpc 1/2
+#   position_based: first 0.4 email, last 0.4 cpc, two middle touches share
+#                   0.2 -> 0.1 email + 0.1 cpc -> email 1/2, cpc 1/2
+#   time_decay:     half-life 7 days; ages 14, 7, 0, 0 days -> weights
+#                   1/4, 1/2, 1, 1 (sum 11/4) -> email 3/11, cpc 8/11
+HAND_CALCULATED = {
+    "first_touch": {"newsletter / email": 1.0},
+    "last_touch": {"google / cpc": 1.0},
+    "linear": {"newsletter / email": 0.5, "google / cpc": 0.5},
+    "position_based": {"newsletter / email": 0.5, "google / cpc": 0.5},
+    "time_decay": {"newsletter / email": 3 / 11, "google / cpc": 8 / 11},
+}
+
+
+@pytest.mark.parametrize("model", FIVE_MODELS)
+def test_hand_calculated_journey_through_bigquery_import(model):
+    # Only numeric-looking pseudo ids here: without the "ga4:" prefix the CSV
+    # would parse customer_id as a float and every touchpoint would be dropped.
+    rows = [row for row in load_rows() if row["user_pseudo_id"] == "6000000006.1709330000"]
+    result, _ = _import(FakeBigQueryClient(rows=rows))
+    summary, outcome = _upload_path(result.frame.to_csv(index=False).encode())[model]
+    credits = {channel: values["credit"] for channel, values in outcome["channels"].items()}
+    expected = {channel: value for channel, value in HAND_CALCULATED[model].items()}
+    credits = {channel: value for channel, value in credits.items() if value}
+    assert credits == pytest.approx(expected, abs=1e-12)
+    revenue = {channel: values["revenue"] for channel, values in outcome["channels"].items()}
+    for channel, share in expected.items():
+        assert revenue[channel] == pytest.approx(100.0 * share, abs=1e-9)
+    assert summary["total_revenue"] == 100.0
 
 
 # --- the 5 models on test_data.csv are unchanged --------------------------------
