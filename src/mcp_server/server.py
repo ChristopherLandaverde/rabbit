@@ -24,7 +24,8 @@ import os
 import sys
 import tempfile
 import time
-from contextlib import redirect_stdout
+import uuid
+from io import TextIOWrapper
 from pathlib import Path
 from typing import Annotated, Any, Callable
 
@@ -41,7 +42,8 @@ MEANING = (
 FIVE_MODELS = ["first_touch", "last_touch", "linear", "time_decay", "position_based"]
 SUPPORTED_EXTENSIONS = {"csv", "json", "parquet"}
 POLL_INTERVAL_SECONDS = 1.0
-DEFAULT_POLL_TIMEOUT_SECONDS = 300
+DEFAULT_POLL_TIMEOUT_SECONDS = 60
+MAX_RETRY_AFTER_SECONDS = 30
 
 # Test seams. None means: let the importer build its own ADC client, and talk
 # to RABBIT_URL with a plain httpx client.
@@ -78,16 +80,11 @@ def _error(failure: ToolFailure) -> CallToolResult:
 async def _guarded(work: Callable[[], dict[str, Any]]) -> CallToolResult:
     """Run blocking engine work off the event loop; map failures to tool errors.
 
-    The engine prints diagnostics to stdout, which carries the stdio protocol,
-    so stdout is pointed at stderr while it runs.
+    Engine prints are safe here: under stdio, ``main`` has already moved fd 1
+    and ``sys.stdout`` to stderr (see ``_claim_stdout_for_protocol``).
     """
-
-    def run():
-        with redirect_stdout(sys.stderr):
-            return work()
-
     try:
-        return _result(await anyio.to_thread.run_sync(run))
+        return _result(await anyio.to_thread.run_sync(work))
     except ToolFailure as failure:
         return _error(failure)
 
@@ -110,9 +107,8 @@ def _source(touchpoints_path: str | None, dataset_id: str | None) -> tuple[str, 
     return ("file", touchpoints_path) if touchpoints_path else ("v2_api", dataset_id)
 
 
-def _read_local(path_text: str):
-    from src.v2.datasets import _read_frame
-
+def _local_path(path_text: str) -> tuple[Path, str]:
+    """Check a touchpoints path; returns the path and its extension."""
     path = Path(path_text).expanduser()
     if not path.is_file():
         raise ToolFailure("file_not_found", f"No file at {path_text!r}.",
@@ -124,6 +120,13 @@ def _read_local(path_text: str):
             f"{path.name} is not CSV, JSON or Parquet.",
             fix_hint="Use a touchpoints file with a .csv, .json or .parquet extension.",
         )
+    return path, extension
+
+
+def _read_local(path_text: str):
+    from src.v2.datasets import _read_frame
+
+    path, extension = _local_path(path_text)
     return path, _read_frame(path.read_bytes(), extension)
 
 
@@ -169,7 +172,32 @@ def _api_settings() -> tuple[str, str]:
             "dataset_id needs a Rabbit v2 API: set RABBIT_URL and RABBIT_API_KEY in the "
             "MCP server's environment, or pass touchpoints_path to run locally.",
         )
+    _check_api_url(url)
     return url.rstrip("/"), key
+
+
+def _check_api_url(url: str) -> None:
+    """https anywhere; plain http only to this machine, so the key never crosses
+    a network in clear text."""
+    import ipaddress
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    if parts.scheme == "https" and host:
+        return
+    if parts.scheme == "http" and host:
+        try:
+            loopback = ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            loopback = host == "localhost"
+        if loopback:
+            return
+    raise ToolFailure(
+        "insecure_api_url",
+        f"RABBIT_URL must be https://, or http:// to localhost/127.0.0.1/::1; got {url!r}.",
+        fix_hint="Put the Rabbit API behind TLS, or tunnel it to localhost.",
+    )
 
 
 def _api_client(base_url: str):
@@ -180,22 +208,37 @@ def _api_client(base_url: str):
     return httpx.Client(base_url=base_url, timeout=30.0)
 
 
-def _api(client, method: str, path: str, key: str, **kwargs) -> dict[str, Any]:
+def _api(client, method: str, path: str, key: str, headers: dict | None = None,
+         **kwargs) -> dict[str, Any]:
     response = client.request(
-        method, path, headers={"Authorization": f"Bearer {key}"}, **kwargs
+        method, path, headers={**(headers or {}), "Authorization": f"Bearer {key}"}, **kwargs
     )
     try:
         body = response.json()
     except ValueError:
-        body = {}
+        body = None
     if response.status_code >= 400:
+        problem = body if isinstance(body, dict) else {}
+        details: dict[str, Any] = {"status": response.status_code,
+                                   "fix_hint": problem.get("fix_hint")}
+        if response.headers.get("Retry-After"):
+            details["retry_after"] = response.headers["Retry-After"]
         raise ToolFailure(
-            body.get("code") or "api_error",
-            body.get("detail") or f"Rabbit API returned HTTP {response.status_code}.",
-            status=response.status_code,
-            fix_hint=body.get("fix_hint"),
+            str(problem.get("code") or "api_error"),
+            str(problem.get("detail") or f"Rabbit API returned HTTP {response.status_code}."),
+            **details,
         )
+    if not isinstance(body, dict):
+        raise ToolFailure("api_error", f"Rabbit API returned a non-object body for {path}.",
+                          status=response.status_code)
     return body
+
+
+def _retry_after_seconds(failure: ToolFailure) -> float:
+    try:
+        return max(1.0, min(float(failure.details.get("retry_after")), MAX_RETRY_AFTER_SECONDS))
+    except (TypeError, ValueError):
+        return POLL_INTERVAL_SECONDS
 
 
 def _api_analysis(dataset_id: str, models: list[str], options: dict | None) -> dict[str, Any]:
@@ -204,18 +247,38 @@ def _api_analysis(dataset_id: str, models: list[str], options: dict | None) -> d
     payload: dict[str, Any] = {"dataset_id": dataset_id, "models": models}
     if options:
         payload["options"] = options
+    # One key per tool call: a retried POST (after a 429) replays instead of
+    # queueing a second analysis.
+    headers = {"Idempotency-Key": f"rabbit-mcp-{uuid.uuid4()}"}
+    deadline = time.monotonic() + timeout
     with _api_client(url) as client:
-        created = _api(client, "POST", "/v2/analyses", key, json=payload)
-        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                created = _api(client, "POST", "/v2/analyses", key, json=payload,
+                               headers=headers)
+                break
+            except ToolFailure as failure:
+                wait = _retry_after_seconds(failure)
+                if failure.details.get("status") != 429 or time.monotonic() + wait > deadline:
+                    raise
+                time.sleep(wait)
         while True:
             analysis = _api(client, "GET", f"/v2/analyses/{created['id']}", key)
             if analysis["status"] in ("succeeded", "failed", "cancelled"):
                 break
             if time.monotonic() > deadline:
+                cancelled = True
+                try:
+                    _api(client, "POST", f"/v2/analyses/{created['id']}/cancel", key)
+                except ToolFailure:
+                    cancelled = False  # e.g. it finished in the meantime
                 raise ToolFailure(
                     "analysis_timeout",
-                    f"Analysis {created['id']} is still {analysis['status']} after {timeout:.0f}s.",
+                    f"Analysis {created['id']} was still {analysis['status']} after "
+                    f"{timeout:.0f}s" + ("; it was cancelled." if cancelled else "."),
                     analysis_id=created["id"],
+                    cancelled=cancelled,
+                    fix_hint="Raise RABBIT_MCP_POLL_TIMEOUT, or check the API's worker.",
                 )
             time.sleep(POLL_INTERVAL_SECONDS)
     if analysis["status"] != "succeeded":
@@ -290,13 +353,11 @@ def _dataset_quality(touchpoints_path, dataset_id) -> dict[str, Any]:
             "unique_customers": dataset.get("unique_customers"),
             "validation": dataset.get("validation"),
         }
-    from src.v2.datasets import _validation_report
+    from src.v2.datasets import _read_frame, _validation_report
 
-    path = Path(value).expanduser()
+    path, extension = _local_path(value)  # missing file or wrong type: a tool error
     try:
-        path, frame = _read_local(value)
-    except ToolFailure:
-        raise
+        frame = _read_frame(path.read_bytes(), extension)
     except Exception as exc:  # unparseable file: same report the upload gives
         report = _validation_report(None, exc).model_dump()
         return {"source": {"type": "file", "path": str(path)}, "status": "invalid",
@@ -526,8 +587,36 @@ def build_server() -> FastMCP:
     return server
 
 
+def _claim_stdout_for_protocol() -> anyio.AsyncFile[str]:
+    """Reserve the real stdout for JSON-RPC and send everything else to stderr.
+
+    The engine prints diagnostics (for example the journey builder's
+    "Error creating touchpoint" lines) from worker threads. A per-call
+    ``redirect_stdout`` swaps process-global state and races between
+    concurrent calls, so instead, once at startup: duplicate fd 1 for the
+    protocol, point fd 1 at stderr (catches C-level and subprocess writes),
+    and point ``sys.stdout`` at stderr (catches ``print``).
+    """
+    sys.stdout.flush()
+    protocol = os.fdopen(os.dup(1), "wb")
+    os.dup2(2, 1)
+    sys.stdout = sys.stderr
+    return anyio.wrap_file(TextIOWrapper(protocol, encoding="utf-8"))
+
+
+async def _serve_stdio(server: FastMCP, protocol_out: anyio.AsyncFile[str]) -> None:
+    from mcp.server.stdio import stdio_server
+
+    # FastMCP.run_stdio_async, but with the reserved protocol stream.
+    lowlevel = server._mcp_server
+    async with stdio_server(stdout=protocol_out) as (read_stream, write_stream):
+        await lowlevel.run(read_stream, write_stream, lowlevel.create_initialization_options())
+
+
 def main() -> None:
-    build_server().run("stdio")
+    server = build_server()
+    protocol_out = _claim_stdout_for_protocol()
+    anyio.run(_serve_stdio, server, protocol_out)
 
 
 if __name__ == "__main__":  # pragma: no cover

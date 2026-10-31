@@ -181,7 +181,7 @@ claude mcp list   # expect a line: rabbit: ... - Connected
 }
 ```
 
-To use `dataset_id`, add `RABBIT_URL` (for example `http://127.0.0.1:8000`) and `RABBIT_API_KEY` to `env` (or `-e` for Claude Code). `import_ga4` needs `gcloud auth application-default login` on the same machine.
+To use `dataset_id`, add `RABBIT_URL` (for example `http://127.0.0.1:8000`) and `RABBIT_API_KEY` to `env` (or `-e` for Claude Code). `RABBIT_URL` must be `https://`, or `http://` to localhost, so the key never crosses a network unencrypted. `import_ga4` needs `gcloud auth application-default login` on the same machine.
 
 Then ask your agent, for example: "Use rabbit to check /abs/path/to/rabbit/test_data.csv, then compare first-touch and last-touch on it." On this file it gets email 33% under `first_touch` and 67% under `last_touch`, with `model_agreement_score` 0.79.
 
@@ -315,7 +315,7 @@ isError=False
 - **One model per v1 request.** On the supported v1 API, comparing models means one request per model, as in the quick start. The experimental v2 API can run up to five models in one analysis and return a comparison block (see [Status](#status)).
 - **Rule-based models only.** No data-driven (Markov, Shapley) model, no cross-device stitching beyond the identifier columns in the CSV (or GA4 `user_id`, for the importer), no ad-platform connectors.
 - **The GA4 importer is fixture-verified only.** It reads `session_start` and one conversion event, follows GA4's last non-direct session source for untagged sessions, skips consent-denied traffic, and has not been run against a real export. See [its limits](docs/importers/ga4-bigquery.md#known-limits).
-- **The MCP server is local and read-mostly.** It runs over stdio only (no HTTP transport), is not published to any MCP registry or package index, and `import_ga4` is its only tool that writes (a new CSV, never overwriting). `dataset_id` calls poll the API for up to 300 s (`RABBIT_MCP_POLL_TIMEOUT`).
+- **The MCP server is local and read-mostly.** It runs over stdio only (no HTTP transport), is not published to any MCP registry or package index, and `import_ga4` is its only tool that writes (a new CSV, never overwriting). `dataset_id` calls poll the API for up to 60 s (`RABBIT_MCP_POLL_TIMEOUT`) and cancel the analysis if it hasn't finished; a 429 is retried after its `Retry-After` within that time.
 - **Redis is optional but reported.** Without Redis on `localhost:6379`, analysis still works but `/health` returns HTTP 200 with `"status": "unhealthy"`.
 - **Not deployed or published.** There is no hosted instance and no package; run it locally.
 - **Frontend and Docker are not the supported path.** The React app in `frontend/` builds in CI, and Docker Compose files exist, but neither was verified for this README.
