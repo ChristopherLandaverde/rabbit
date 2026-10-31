@@ -5,27 +5,28 @@
 <h1 align="center">Rabbit</h1>
 
 <p align="center">
-  <strong>The attribution model you pick moves your budget. See by how much before you commit to one.</strong>
+  <strong>The attribution model you pick moves your budget. Compare all five on your data from the API or your AI agent.</strong>
 </p>
 
 <p align="center">
-  5 rule-based attribution models · self-hosted API · CSV of touchpoints in, each channel's credit share out
+  5 rule-based attribution models · Jensen-Shannon model comparison · self-hosted API · MCP server for Claude, Cursor and any MCP client
 </p>
 
 <p align="center">
   <a href="https://github.com/ChristopherLandaverde/rabbit/actions/workflows/ci.yml"><img src="https://github.com/ChristopherLandaverde/rabbit/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ChristopherLandaverde/rabbit?color=10231F" alt="License: MIT"></a>
+  <a href="#agentic"><img src="https://img.shields.io/badge/agentic-L2%C2%B7L3-10231F" alt="Agentic: L2 agent-callable, L3 live read (fixture-verified)"></a>
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick start</a> · <a href="#same-data-five-models">Same data, five models</a> · <a href="#use-it-from-an-agent-mcp">Use from an agent</a> · <a href="#known-limits">Known limits</a> · <a href="#status">Status</a> · <a href="docs/usage.md">Usage guide</a>
+  <a href="#quick-start">Quick start</a> · <a href="#agentic">For agents</a> · <a href="#same-data-five-models">Same data, five models</a> · <a href="#known-limits">Known limits</a> · <a href="#status">Status</a> · <a href="docs/usage.md">Usage guide</a>
 </p>
 
 On the bundled sample of 10 touchpoints, email gets **33%** of conversion credit under first-touch and **67%** under last-touch. Same data, same conversions; only the model changed.
 
-Rabbit is a small self-hosted API for marketing analysts and RevOps people choosing or defending an attribution model, and for engineers who want an attribution endpoint they run themselves. Post a CSV of touchpoints; get each channel's share of conversion credit under first-touch, last-touch, linear, time-decay or position-based. Results describe attribution under the named model; they do not estimate causal impact.
+Rabbit is a small self-hosted API for marketing analysts and RevOps people choosing or defending an attribution model, and for engineers who want an attribution endpoint they run themselves. Post a CSV of touchpoints; get each channel's share of conversion credit under first-touch, last-touch, linear, time-decay or position-based. Results describe attribution under the named model; they do not estimate causal impact. Your own agent can call the same engine through the local `rabbit-mcp` server to check a dataset, run and compare models, or import a GA4 BigQuery export read-only; no tool changes your ad or analytics accounts, and what to do about the credits stays your call.
 
-**Status: in active development again.** The v1 API is the supported path; an experimental v2 API, now up to milestone M3b (several models in one analysis, with a side-by-side comparison), runs behind a flag. See [Status](#status).
+**Status: in active development again.** The v1 API is the supported path; an experimental v2 API, now up to milestone M3c (several models in one analysis with a side-by-side comparison, idempotency keys, a per-key cap on running analyses, and cancel), runs behind a flag. See [Status](#status).
 
 ## Same data, five models
 
@@ -44,6 +45,23 @@ Share of conversion credit per channel on `test_data.csv` (3 customers, 10 touch
 | paid_search | 0% | 0% | 19% | 19% | 10% |
 
 Paid search touched 2 of the 3 journeys and gets nothing under either single-touch model. Social drops from a third of the credit to zero between first-touch and last-touch. If you set budgets from one model without looking at the others, that swing goes in unexamined. (`time_decay` matches `linear` here because the sample's journeys last 3 hours or less against a 7-day default half-life; see the [usage guide](docs/usage.md#attribution-models).)
+
+## Agentic
+
+<p align="center">
+  <img src="docs/media/agentic-stack.svg" width="880" alt="Rabbit's agentic stack as four layers. Layer 1, engine: 5 attribution models plus the Jensen-Shannon multi-model comparison, the base layer, with L1 pending issue 69. Layer 2, tools: rabbit-mcp, the v2 API and the GA4 BigQuery importer, with the MCP tools import_ga4, run_models, compare_models and dataset_quality, at L2 agent-callable. Layer 3, your agent: Claude, Cursor or any MCP client, at L3 live read, fixture-verified. Layer 4, you approve: nothing writes to your accounts and credits under a named model are evidence for you to act on; L4 not built.">
+</p>
+
+| Ask your agent… | Tool | Reads | Writes |
+|---|---|---|---|
+| "Is `/abs/path/touchpoints.csv` ready to analyse?" | `dataset_quality` | The CSV, or a dataset on your Rabbit v2 API | Nothing |
+| "Give me each channel's credit under last-touch and linear." | `run_models` | The CSV or dataset | Nothing for a CSV; with a `dataset_id`, one analysis record on your own Rabbit API |
+| "How far do first-touch and last-touch disagree on this file?" | `compare_models` | The CSV or dataset | As `run_models` |
+| "Import purchases from `analytics_123456789` for 1–15 March, then compare all five models." | `import_ga4`, then `compare_models` | Your GA4 BigQuery export: one `SELECT`, after a dry-run byte estimate and under a `max_bytes` cap; the query is billed to your GCP project | One new local CSV, never overwriting |
+
+Agentic levels: L1 machine-readable · L2 agent-callable · L3 live read. Rabbit: L2 agent-callable (`rabbit-mcp`) · L3 live read (fixture-verified: the GA4 importer is tested against hand-built GA4-shaped rows through a mocked BigQuery client, not yet a real export) · L1 pending a versioned output schema with schema-pinning tests ([#69](https://github.com/ChristopherLandaverde/rabbit/issues/69)). No L4: nothing writes to your accounts (`import_ga4` writes only a new local CSV).
+
+Details: [Use it from an agent (MCP)](#use-it-from-an-agent-mcp) for setup and real tool calls, [Live import from GA4 BigQuery](#live-import-from-ga4-bigquery) for scopes, roles and cost guards, and [SPEC_v2](docs/api/SPEC_v2.md) for idempotency, the per-key cap and cancel.
 
 ## What you get
 
@@ -323,7 +341,7 @@ isError=False
 
 ## Status
 
-Restarted on 2026-10-30 after a pause at milestone M3a. The v1 API above is the supported path. A v2 API runs behind `RABBIT_V2_ENABLED=true` and needs Postgres and Redis. It has API keys, dataset upload and async analyses (M0–M3a), and with M3b one analysis can run one to five models. With two or more, the response adds a comparison block: each channel's credit under each model, the spread between models, and a `model_agreement_score` (1 minus the mean pairwise Jensen-Shannon divergence, so 1.0 means the models split credit identically). That score describes how much the models agree with each other, not which one is right; see [SPEC_v2 §7](docs/api/SPEC_v2.md#7-comparison-math-model_agreement_score). The engine is also callable from an agent through the local [MCP server](#use-it-from-an-agent-mcp). Planned and not built: idempotency keys, cancel, webhooks, an SDK and a deployment ([roadmap](docs/business/ROADMAP.md), [plan](docs/business/PLAN_v2.md)).
+Restarted on 2026-10-30 after a pause at milestone M3a. The v1 API above is the supported path. A v2 API runs behind `RABBIT_V2_ENABLED=true` and needs Postgres and Redis. It has API keys, dataset upload and async analyses (M0–M3a), and with M3b one analysis can run one to five models. With two or more, the response adds a comparison block: each channel's credit under each model, the spread between models, and a `model_agreement_score` (1 minus the mean pairwise Jensen-Shannon divergence, so 1.0 means the models split credit identically). That score describes how much the models agree with each other, not which one is right; see [SPEC_v2 §7](docs/api/SPEC_v2.md#7-comparison-math-model_agreement_score). M3c adds an `Idempotency-Key` header on `POST /v2/analyses` (the same key and body within 24 hours replays the original analysis), a per-key cap on queued and running analyses (3 by default, then 429 with `Retry-After`), and `POST /v2/analyses/{id}/cancel`. The engine is also callable from an agent through the local [MCP server](#use-it-from-an-agent-mcp) (agentic level L2, plus L3 live read through the fixture-verified GA4 importer; see [Agentic](#agentic)). Planned and not built: L1 proper, a versioned output schema with schema-pinning tests ([#69](https://github.com/ChristopherLandaverde/rabbit/issues/69)); a first run against a real GA4 export, which drops the fixture-verified label; webhooks, an SDK and a deployment ([roadmap](docs/business/ROADMAP.md), [plan](docs/business/PLAN_v2.md)).
 
 ## Development
 
