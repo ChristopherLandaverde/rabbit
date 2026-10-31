@@ -1,5 +1,9 @@
 """Async attribution analyses: one to five models per request (#16, #17).
 
+M3c (#18) adds Idempotency-Key replay protection, a per-key cap on in-flight
+analyses, POST /v2/analyses/{id}/cancel, and a janitor that fails analyses whose
+worker stopped reporting progress.
+
 An analysis applies one or more named, rule-based attribution models to a ready
 dataset. The credits each returns describe how conversions are distributed
 across channels under that model's rule. They are associations, not measured
@@ -9,16 +13,20 @@ comparison block (see src/v2/comparison.py and SPEC_v2 section 7).
 
 import asyncio
 import base64
+import hashlib
+import json
 import logging
 import math
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, Request, Response
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
@@ -27,7 +35,7 @@ from ..core.attribution_service import AttributionService
 from ..core.identity.resolver import IdentityResolver, select_linking_method
 from ..core.journey_analysis import JourneyAnalyzer
 from ..core.validation.validators import validate_data_quality
-from ..db.models import Analysis, Dataset
+from ..db.models import Analysis, ApiKey, Dataset
 from ..db.session import get_session
 from ..models.enums import AttributionModelType
 from .auth.dependencies import require_api_key, require_scope
@@ -48,6 +56,13 @@ SUPPORTED_OPTIONS = {
 INCLUDABLE = {"journey"}
 # Sanity bound (10 years) so a huge value is a 422, not a timedelta overflow in the worker.
 MAX_CONVERSION_WINDOW_DAYS = 3650
+IN_FLIGHT_STATUSES = ("queued", "running")
+IDEMPOTENCY_WINDOW = timedelta(hours=24)
+MAX_IDEMPOTENCY_KEY_LENGTH = 255
+CONCURRENCY_RETRY_AFTER_SECONDS = 10
+DEFAULT_MAX_RUNTIME_MINUTES = 30
+DEFAULT_STALE_PROGRESS_MINUTES = 5
+JANITOR_INTERVAL_SECONDS = 60
 
 INTERPRETATION_TYPE = "association"
 ANALYSIS_DESCRIPTION = (
@@ -306,48 +321,77 @@ async def claim_next_analysis(session_factory) -> str | None:
         return analysis.id
 
 
+async def _update_if_running(session, analysis_id: str, **values) -> bool:
+    """Write to an analysis only while it is still running.
+
+    A cancel (#18) or the janitor can move a running analysis to a terminal
+    state while the worker computes. The status condition makes the worker's
+    write lose that race instead of overwriting it. Returns False when the
+    analysis is no longer running, so the worker stops.
+    """
+    result = await session.execute(
+        update(Analysis)
+        .where(Analysis.id == analysis_id, Analysis.status == "running")
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+    return result.rowcount == 1
+
+
 async def execute_analysis(analysis_id: str, session_factory, storage) -> None:
     """Run every model of a claimed analysis and store the results."""
     async with session_factory() as session:
         analysis = await session.get(Analysis, analysis_id)
         if analysis is None or analysis.status != "running":
             return
+        model_names = list(analysis.models)
+        parameters = (analysis.options or {}).get("parameters", {})
+        dataset_id = analysis.dataset_id
         try:
-            dataset = await session.get(Dataset, analysis.dataset_id)
+            dataset = await session.get(Dataset, dataset_id)
             raw = storage.read(dataset.storage_uri)
             extension = Path(dataset.filename).suffix.lower().lstrip(".")
             frame = _read_frame(raw, extension)
-            parameters = (analysis.options or {}).get("parameters", {})
             summary, models = None, {}
-            for index, model in enumerate(analysis.models, start=1):
+            for index, model in enumerate(model_names, start=1):
                 summary, models[model] = await asyncio.to_thread(
                     compute_model_result, frame, model, parameters.get(model, {})
                 )
-                analysis.progress = {
-                    "models_completed": index,
-                    "models_total": len(analysis.models),
-                }
-                analysis.last_progress_at = datetime.now(timezone.utc)
-                await session.commit()
+                still_running = await _update_if_running(
+                    session, analysis_id,
+                    progress={"models_completed": index, "models_total": len(model_names)},
+                    last_progress_at=datetime.now(timezone.utc),
+                )
+                if not still_running:
+                    return
             try:
                 journey = await asyncio.to_thread(compute_journey_block, frame)
             except Exception:
                 logger.exception("Journey block failed for analysis %s", analysis_id)
                 journey = None
-            analysis.comparison = build_comparison(analysis.models, models)
-            analysis.results = {"summary": summary, "models": models, "journey": journey}
-            analysis.status = "succeeded"
+            completed_at = datetime.now(timezone.utc)
+            await _update_if_running(
+                session, analysis_id,
+                status="succeeded",
+                comparison=build_comparison(model_names, models),
+                results={"summary": summary, "models": models, "journey": journey},
+                completed_at=completed_at,
+                last_progress_at=completed_at,
+            )
         except Exception as exc:
             await session.rollback()
-            analysis = await session.get(Analysis, analysis_id)
-            analysis.status = "failed"
-            analysis.error = {
-                "code": "analysis_failed",
-                "message": f"The model could not be run on this dataset: {str(exc)[:300]}",
-            }
-        analysis.completed_at = datetime.now(timezone.utc)
-        analysis.last_progress_at = analysis.completed_at
-        await session.commit()
+            completed_at = datetime.now(timezone.utc)
+            await _update_if_running(
+                session, analysis_id,
+                status="failed",
+                error={
+                    "code": "analysis_failed",
+                    "message": f"The model could not be run on this dataset: {str(exc)[:300]}",
+                },
+                completed_at=completed_at,
+                last_progress_at=completed_at,
+            )
 
 
 async def process_queued_analyses(session_factory, storage) -> int:
@@ -374,6 +418,80 @@ async def run_worker(session_factory, storage, poll_seconds: float = 1.0,
                 await asyncio.wait_for(stop.wait(), timeout=poll_seconds)
             except TimeoutError:
                 pass
+
+
+def janitor_settings() -> tuple[int, int]:
+    """(max runtime, stale-progress threshold) in minutes, from the environment."""
+    return (
+        int(os.getenv("RABBIT_ANALYSIS_MAX_RUNTIME_MINUTES", DEFAULT_MAX_RUNTIME_MINUTES)),
+        int(os.getenv("RABBIT_ANALYSIS_STALE_PROGRESS_MINUTES", DEFAULT_STALE_PROGRESS_MINUTES)),
+    )
+
+
+async def reap_stuck_analyses(
+    session_factory, now: datetime | None = None,
+    max_runtime_minutes: int | None = None, stale_after_minutes: int | None = None,
+) -> list[str]:
+    """Fail running analyses whose worker has stopped (T2); returns their ids.
+
+    An analysis is stuck when it has run longer than the max runtime AND its
+    last progress heartbeat is older than the stale threshold. A long analysis
+    that still reports progress is left alone, as is one still within the max
+    runtime.
+    """
+    default_runtime, default_stale = janitor_settings()
+    now = now or datetime.now(timezone.utc)
+    runtime_cutoff = now - timedelta(minutes=max_runtime_minutes or default_runtime)
+    stale_cutoff = now - timedelta(minutes=stale_after_minutes or default_stale)
+    stuck_conditions = (
+        Analysis.status == "running",
+        Analysis.started_at < runtime_cutoff,
+        or_(Analysis.last_progress_at.is_(None), Analysis.last_progress_at < stale_cutoff),
+    )
+    reaped = []
+    async with session_factory() as session:
+        candidates = (
+            await session.execute(select(Analysis.id).where(*stuck_conditions))
+        ).scalars().all()
+        for analysis_id in candidates:
+            # Re-check every condition in the write, so a heartbeat that lands
+            # between the select and the update keeps the analysis running.
+            result = await session.execute(
+                update(Analysis)
+                .where(Analysis.id == analysis_id, *stuck_conditions)
+                .values(
+                    status="failed",
+                    error={
+                        "code": "worker_timeout",
+                        "message": "The worker stopped reporting progress before the "
+                                   "analysis finished. Submit the analysis again.",
+                    },
+                    completed_at=now,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            await session.commit()
+            if result.rowcount == 1:
+                reaped.append(analysis_id)
+    if reaped:
+        logger.warning("Janitor failed %d stuck analyses: %s", len(reaped), ", ".join(reaped))
+    return reaped
+
+
+async def run_janitor(session_factory, interval_seconds: float = JANITOR_INTERVAL_SECONDS,
+                      stop: asyncio.Event | None = None) -> None:
+    """Sweep for stuck analyses every ``interval_seconds`` until ``stop`` is set."""
+    stop = stop or asyncio.Event()
+    while not stop.is_set():
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=interval_seconds)
+            return
+        except TimeoutError:
+            pass
+        try:
+            await reap_stuck_analyses(session_factory)
+        except Exception:
+            logger.exception("Analysis janitor sweep failed; retrying next interval")
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -413,6 +531,43 @@ def _not_found(detail="No analysis has that id.") -> ApiProblem:
     return ApiProblem(404, "not_found", "Analysis not found", detail, "Check the analysis id.", DOCS)
 
 
+def _as_utc(value: datetime) -> datetime:
+    # SQLite returns naive datetimes; every stored timestamp is UTC.
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _fingerprint(payload: AnalysisCreate) -> str:
+    canonical = json.dumps(payload.model_dump(), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _idempotency_conflict(idempotency_key: str) -> ApiProblem:
+    return ApiProblem(
+        409, "idempotency_key_in_use", "Idempotency key in use",
+        f"Idempotency-Key {idempotency_key!r} was used in the last 24 hours with a different request body.",
+        "Send a new Idempotency-Key for a different request, or resend the original body.",
+        "https://docs.rabbit.example/errors#idempotency_key_in_use",
+    )
+
+
+async def _find_idempotent(session, key_id: str, idempotency_key: str) -> Analysis | None:
+    return (
+        await session.execute(
+            select(Analysis).where(
+                Analysis.key_id == key_id, Analysis.idempotency_key == idempotency_key
+            )
+        )
+    ).scalar_one_or_none()
+
+
+def _replay(existing: Analysis, fingerprint: str, idempotency_key: str, livemode: bool,
+            response: Response):
+    if (existing.options or {}).get("request_fingerprint") != fingerprint:
+        raise _idempotency_conflict(idempotency_key)
+    response.headers["Idempotent-Replayed"] = "true"
+    return _analysis_response(existing, livemode, include_results=False)
+
+
 @router.post(
     "/analyses",
     status_code=202,
@@ -423,10 +578,32 @@ def _not_found(detail="No analysis has that id.") -> ApiProblem:
 async def create_analysis(
     payload: AnalysisCreate,
     request: Request,
+    response: Response,
     background_tasks: BackgroundTasks,
+    idempotency_key: str | None = Header(
+        None, alias="Idempotency-Key",
+        description="Replays return the original analysis for 24 hours; "
+                    "a different body with the same key returns 409.",
+    ),
     key=Depends(require_api_key),
     session: AsyncSession = Depends(get_session),
 ):
+    fingerprint = _fingerprint(payload)
+    if idempotency_key is not None:
+        if not idempotency_key.strip() or len(idempotency_key) > MAX_IDEMPOTENCY_KEY_LENGTH:
+            raise _invalid(
+                "invalid_idempotency_key",
+                f"Idempotency-Key must be 1 to {MAX_IDEMPOTENCY_KEY_LENGTH} characters.",
+                "Send a UUID as the Idempotency-Key.",
+            )
+        existing = await _find_idempotent(session, key.id, idempotency_key)
+        if existing is not None:
+            if datetime.now(timezone.utc) - _as_utc(existing.created_at) < IDEMPOTENCY_WINDOW:
+                return _replay(existing, fingerprint, idempotency_key, key.livemode, response)
+            # Older than 24h: release the key so the unique index admits a new analysis.
+            existing.idempotency_key = None
+            await session.commit()
+
     if not payload.models:
         raise _invalid(
             "validation_failed", "models must name 1 to 5 models.", 'Send "models": ["linear"].'
@@ -485,17 +662,54 @@ async def create_analysis(
             "https://docs.rabbit.example/errors#dataset_too_large",
         )
 
+    # Lock the key row (Postgres) so concurrent POSTs for one key count in-flight
+    # analyses one at a time; SQLite ignores FOR UPDATE and serializes writes anyway.
+    key_row = (
+        await session.execute(select(ApiKey).where(ApiKey.id == key.id).with_for_update())
+    ).scalar_one()
+    limit = key_row.max_concurrent_analyses or 3
+    in_flight = (
+        await session.execute(
+            select(func.count(Analysis.id)).where(
+                Analysis.key_id == key.id, Analysis.status.in_(IN_FLIGHT_STATUSES)
+            )
+        )
+    ).scalar_one()
+    if in_flight >= limit:
+        await session.rollback()
+        raise ApiProblem(
+            429, "too_many_in_flight_analyses", "Too many analyses in flight",
+            f"This API key already has {in_flight} queued or running analyses; "
+            f"the limit is {limit}.",
+            "Wait for an analysis to finish or cancel one, then retry.",
+            "https://docs.rabbit.example/errors#too_many_in_flight_analyses",
+            headers={"Retry-After": str(CONCURRENCY_RETRY_AFTER_SECONDS)},
+        )
+
     analysis = Analysis(
         id=str(ULID()),
         key_id=key.id,
         dataset_id=dataset.id,
         models=payload.models,
-        options={"request": payload.options or {}, "parameters": parameters},
+        options={
+            "request": payload.options or {},
+            "parameters": parameters,
+            "request_fingerprint": fingerprint,
+        },
         status="queued",
+        idempotency_key=idempotency_key,
         created_at=datetime.now(timezone.utc),
     )
     session.add(analysis)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # A concurrent request with the same Idempotency-Key won the insert.
+        await session.rollback()
+        existing = await _find_idempotent(session, key.id, idempotency_key)
+        if idempotency_key is None or existing is None:
+            raise
+        return _replay(existing, fingerprint, idempotency_key, key.livemode, response)
 
     if getattr(request.app.state, "analysis_inline_worker", True):
         session_factory = getattr(request.app.state, "api_session_factory", None)
@@ -536,6 +750,46 @@ async def get_analysis(
     if analysis is None:
         raise _not_found()
     return _analysis_response(analysis, key.livemode, include=requested)
+
+
+@router.post(
+    "/analyses/{analysis_id}/cancel",
+    summary="Cancel a queued or running analysis",
+    dependencies=[Depends(require_scope("analyses:write"))],
+)
+async def cancel_analysis(
+    analysis_id: str,
+    key=Depends(require_api_key),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        update(Analysis)
+        .where(
+            Analysis.id == analysis_id,
+            Analysis.key_id == key.id,
+            Analysis.status.in_(IN_FLIGHT_STATUSES),
+        )
+        .values(status="cancelled", completed_at=datetime.now(timezone.utc))
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+    analysis = (
+        await session.execute(
+            select(Analysis)
+            .where(Analysis.id == analysis_id, Analysis.key_id == key.id)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if analysis is None:
+        raise _not_found()
+    if result.rowcount != 1:
+        raise ApiProblem(
+            409, "analysis_not_cancellable", "Analysis cannot be cancelled",
+            f"Analysis {analysis.id} is {analysis.status}; only queued or running analyses can be cancelled.",
+            "Nothing to do: the analysis has already finished.",
+            "https://docs.rabbit.example/errors#analysis_not_cancellable",
+        )
+    return _analysis_response(analysis, key.livemode)
 
 
 def _bad_cursor(detail: str) -> ApiProblem:

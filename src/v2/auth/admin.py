@@ -23,6 +23,7 @@ class CreateKey(BaseModel):
     scopes: list[str] = Field(default_factory=list)
     mode: str = "live"
     rate_limit_per_minute: int | None = 60
+    max_concurrent_analyses: int = Field(default=3, ge=1, le=100)
 
 
 async def require_bootstrap_key(x_admin_bootstrap_key: str | None = Header(default=None)):
@@ -50,6 +51,7 @@ def _response_key(key: ApiKey) -> dict:
         "is_test": key.is_test,
         "livemode": not key.is_test,
         "rate_limit_per_minute": key.rate_limit_per_minute,
+        "max_concurrent_analyses": key.max_concurrent_analyses,
         "created_at": key.created_at.isoformat(),
         "revoked_at": key.revoked_at.isoformat() if key.revoked_at else None,
     }
@@ -65,6 +67,7 @@ async def create_key(payload: CreateKey, session: AsyncSession = Depends(get_ses
     key = ApiKey(
         id=str(ULID()), key_hash=hash_api_key(plaintext), key_prefix=plaintext[:12],
         name=payload.name, scopes=payload.scopes, rate_limit_per_minute=payload.rate_limit_per_minute,
+        max_concurrent_analyses=payload.max_concurrent_analyses,
         is_test=is_test, created_at=datetime.now(timezone.utc),
     )
     session.add(key)
