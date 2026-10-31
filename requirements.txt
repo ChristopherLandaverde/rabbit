@@ -1,6 +1,6 @@
 # FastAPI and web framework dependencies
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
+fastapi==0.115.14
+uvicorn[standard]==0.54.0
 python-multipart==0.0.31
 
 # Data processing and analysis
@@ -9,15 +9,15 @@ numpy==1.26.2
 scikit-learn==1.5.0
 
 # Data validation and serialization
-pydantic==2.5.0
-pydantic-settings==2.1.0
+pydantic==2.14.1
+pydantic-settings==2.16.0
 
 # File format support
 pyarrow==14.0.1  # For Parquet support
 openpyxl==3.1.2  # For Excel support
 
 # HTTP client for external API calls
-httpx==0.25.2
+httpx==0.28.1
 
 # Logging and monitoring
 structlog==23.2.0

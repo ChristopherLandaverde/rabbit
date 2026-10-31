@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick start</a> · <a href="#same-data-five-models">Same data, five models</a> · <a href="#known-limits">Known limits</a> · <a href="#status">Status</a> · <a href="docs/usage.md">Usage guide</a>
+  <a href="#quick-start">Quick start</a> · <a href="#same-data-five-models">Same data, five models</a> · <a href="#use-it-from-an-agent-mcp">Use from an agent</a> · <a href="#known-limits">Known limits</a> · <a href="#status">Status</a> · <a href="docs/usage.md">Usage guide</a>
 </p>
 
 On the bundled sample of 10 touchpoints, email gets **33%** of conversion credit under first-touch and **67%** under last-touch. Same data, same conversions; only the model changed.
@@ -106,7 +106,7 @@ python -m src.importers.ga4_bigquery --project my-gcp-project --dataset analytic
   --start 20250301 --end 20250315 --conversion-event purchase --out ga4_touchpoints.csv
 ```
 
-- **Credentials** come from Application Default Credentials on the machine that runs the importer (`gcloud auth application-default login`, or `GOOGLE_APPLICATION_CREDENTIALS`). Rabbit never takes Google credentials in an HTTP request, and never stores or logs them. There is no API endpoint for this yet; it runs as a local CLI or Python function (`import_ga4`).
+- **Credentials** come from Application Default Credentials on the machine that runs the importer (`gcloud auth application-default login`, or `GOOGLE_APPLICATION_CREDENTIALS`). Rabbit never takes Google credentials in an HTTP request, and never stores or logs them. There is no API endpoint for this yet; it runs as a local CLI, a Python function (`import_ga4`) or the `import_ga4` [MCP tool](#use-it-from-an-agent-mcp).
 - **Scope:** `https://www.googleapis.com/auth/cloud-platform.read-only` by default. Google's BigQuery API discovery document (revision 20260811) doesn't list the narrower `bigquery.readonly` for running queries, though third-party reports say it works; `--oauth-scope bigquery.readonly` requests it so a first live run can check. The importer sends one `SELECT` through `jobs.query` and never writes.
 - **Roles:** BigQuery Data Viewer on the export dataset and BigQuery Job User on the project that pays for the query.
 - **Cost:** the query is billed to your GCP project (`--billing-project`, default `--project`) at BigQuery's on-demand rate, with a minimum of 10 MB per daily table read. `--start` and `--end` are required, and the query reads only the columns it needs from those days' tables. Every run does a free dry run first and prints the bytes it will process. Above `--max-bytes` (default 10 GiB) it stops before running anything billable (exit 3); the real query also sets BigQuery's `maximum_bytes_billed` to the same limit (exit 4 if BigQuery refuses it).
@@ -135,12 +135,187 @@ position_based {"google / cpc":23,"newsletter / email":40,"google / organic":25,
 
 The field mapping, exit codes and limits (time zones, journeys cut at `--start`, the last ~72 hours still changing, consent-denied traffic, ranges that cross July 2024) are in [docs/importers/ga4-bigquery.md](docs/importers/ga4-bigquery.md).
 
+## Use it from an agent (MCP)
+
+`rabbit-mcp` is a local MCP server (stdio) that lets your own agent (Claude Code, Claude Desktop, Cursor) call Rabbit's engine as tools. It adds no model of its own: every number in a tool result comes from the same code as the API, and every result carries the sentence "Attribution credits are an association under the named model, not causal impact or incrementality".
+
+| Tool | What it runs | Input |
+|---|---|---|
+| `import_ga4` | The GA4 BigQuery importer above, with the same dry-run guard and `max_bytes` cap. Errors come back as structured results with the CLI's exit code. Writes a new CSV to `out_path` or a temp file and returns its path. | `project`, `dataset`, `start`, `end`, `conversion_event`, optional `max_bytes`, `out_path` |
+| `run_models` | Any of the five models | `touchpoints_path` **or** `dataset_id`, optional `models`, `options` |
+| `compare_models` | Two to five models plus the M3b comparison block (`model_agreement_score`, 1 - mean pairwise Jensen-Shannon divergence) | same as `run_models` |
+| `dataset_quality` | The validation the v2 API runs at upload: required columns, types, rows that can't become touchpoints | `touchpoints_path` **or** `dataset_id` |
+
+A `touchpoints_path` runs in the server process. A `dataset_id` goes to a running v2 API at `RABBIT_URL` with `RABBIT_API_KEY`, both read from the server's environment. No tool takes credentials as an argument, and a test checks that.
+
+**What goes where.** `import_ga4` sends one query from your machine to Google's BigQuery API, using your Application Default Credentials. A `dataset_id` call sends a request to the Rabbit API you point it at. Every tool result goes back to your MCP client, so **it reaches the model behind your own agent** (Anthropic's for Claude, your configured provider for Cursor). Don't use it on data you can't share with that provider. Rabbit itself calls no LLM.
+
+Install the optional dependency (Python 3.12, from the repo root):
+
+```bash
+uv pip install --python .venv/bin/python -r requirements.txt -r requirements-mcp.txt
+```
+
+Every config below needs **absolute paths**: the venv's Python (`.venv/bin/python`, or `.venv\Scripts\python.exe` on Windows) and the repo root as `PYTHONPATH`, because agents start the server from their own working directory. Replace `/abs/path/to/rabbit` with your clone's path.
+
+**Claude Code** (user scope, available in every project):
+
+```bash
+claude mcp add rabbit -s user -e PYTHONPATH=/abs/path/to/rabbit -- /abs/path/to/rabbit/.venv/bin/python -m src.mcp_server
+claude mcp list   # expect a line: rabbit: ... - Connected
+```
+
+**Claude Desktop** (`claude_desktop_config.json`) and **Cursor** (`~/.cursor/mcp.json`, or `.cursor/mcp.json` in a project) use the same block:
+
+```json
+{
+  "mcpServers": {
+    "rabbit": {
+      "command": "/abs/path/to/rabbit/.venv/bin/python",
+      "args": ["-m", "src.mcp_server"],
+      "env": {
+        "PYTHONPATH": "/abs/path/to/rabbit"
+      }
+    }
+  }
+}
+```
+
+To use `dataset_id`, add `RABBIT_URL` (for example `http://127.0.0.1:8000`) and `RABBIT_API_KEY` to `env` (or `-e` for Claude Code). `RABBIT_URL` must be `https://`, or `http://` to localhost, so the key never crosses a network unencrypted. `import_ga4` needs `gcloud auth application-default login` on the same machine.
+
+Then ask your agent, for example: "Use rabbit to check /abs/path/to/rabbit/test_data.csv, then compare first-touch and last-touch on it." On this file it gets email 33% under `first_touch` and 67% under `last_touch`, with `model_agreement_score` 0.79.
+
+<details>
+<summary>Real tool calls from the PR that shipped this, on the bundled <code>test_data.csv</code> (MCP Python client over stdio, untrimmed)</summary>
+
+```text
+# server: rabbit-mcp 1.30.0
+# tools: ['import_ga4', 'run_models', 'compare_models', 'dataset_quality']
+
+>>> call_tool('dataset_quality', {"touchpoints_path": "/home/claude/rabbit-mcp/test_data.csv"})
+isError=False
+{
+  "source": {
+    "type": "file",
+    "path": "/home/claude/rabbit-mcp/test_data.csv"
+  },
+  "status": "ready",
+  "touchpoint_count": 10,
+  "unique_customers": 3,
+  "validation": {
+    "errors": [],
+    "warnings": []
+  },
+  "meaning": "Attribution credits are an association under the named model, not causal impact or incrementality; they do not say what would happen if spend changed."
+}
+
+>>> call_tool('run_models', {"touchpoints_path": "/home/claude/rabbit-mcp/test_data.csv", "models": ["last_touch"]})
+isError=False
+{
+  "source": {
+    "type": "file",
+    "path": "/home/claude/rabbit-mcp/test_data.csv"
+  },
+  "models": [
+    "last_touch"
+  ],
+  "summary": {
+    "touchpoints": 10,
+    "journeys": 3,
+    "converting_journeys": 3,
+    "total_conversions": 3,
+    "total_revenue": 225.0,
+    "linking_method": "customer_id"
+  },
+  "results": {
+    "last_touch": {
+      "model": "last_touch",
+      "parameters": {},
+      "channels": {
+        "email": {
+          "credit": 0.6666666666666666,
+          "conversions": 2,
+          "revenue": 150.0
+        },
+        "organic": {
+          "credit": 0.3333333333333333,
+          "conversions": 1,
+          "revenue": 75.0
+        }
+      }
+    }
+  },
+  "comparison": null,
+  "interpretation": {
+    "type": "association",
+    "statement": "Credits show how conversions are shared across channels under each named model (last_touch) and its parameters. They describe an association in this dataset, not causal effect or incrementality."
+  },
+  "meaning": "Attribution credits are an association under the named model, not causal impact or incrementality; they do not say what would happen if spend changed."
+}
+
+>>> call_tool('compare_models', {"touchpoints_path": "/home/claude/rabbit-mcp/test_data.csv", "models": ["first_touch", "last_touch"]})
+isError=False
+{
+  "source": {
+    "type": "file",
+    "path": "/home/claude/rabbit-mcp/test_data.csv"
+  },
+  "models": [
+    "first_touch",
+    "last_touch"
+  ],
+  "comparison": {
+    "channels": {
+      "email": {
+        "credit_by_model": {
+          "first_touch": 0.3333333333333333,
+          "last_touch": 0.6666666666666666
+        },
+        "credit_spread": 0.3333333333333333,
+        "most_favorable_model": "last_touch",
+        "least_favorable_model": "first_touch"
+      },
+      "organic": {
+        "credit_by_model": {
+          "first_touch": 0.3333333333333333,
+          "last_touch": 0.3333333333333333
+        },
+        "credit_spread": 0.0,
+        "most_favorable_model": "first_touch",
+        "least_favorable_model": "first_touch"
+      },
+      "social": {
+        "credit_by_model": {
+          "first_touch": 0.3333333333333333,
+          "last_touch": 0.0
+        },
+        "credit_spread": 0.3333333333333333,
+        "most_favorable_model": "first_touch",
+        "least_favorable_model": "last_touch"
+      }
+    },
+    "model_agreement_score": 0.7924812503605781,
+    "model_agreement_method": "jensen_shannon"
+  },
+  "interpretation": {
+    "type": "association",
+    "statement": "Credits show how conversions are shared across channels under each named model (first_touch, last_touch) and its parameters. They describe an association in this dataset, not causal effect or incrementality. The comparison shows how far these models' credit splits agree; agreement between models is not evidence that any of them is correct."
+  },
+  "meaning": "Attribution credits are an association under the named model, not causal impact or incrementality; they do not say what would happen if spend changed."
+}
+```
+
+</details>
+
+`import_ga4` is fixture-verified like the importer: its tests run through the MCP client against the mocked BigQuery client, not a real export.
+
 ## Known limits
 
 - **Credit is association, not causation.** The `insights` block in each response (for example "Increase budget allocation to email by 20-30%") is generated by fixed rules from the credit shares and sample size. Treat it as a prompt for investigation, not a recommendation backed by an experiment.
 - **One model per v1 request.** On the supported v1 API, comparing models means one request per model, as in the quick start. The experimental v2 API can run up to five models in one analysis and return a comparison block (see [Status](#status)).
 - **Rule-based models only.** No data-driven (Markov, Shapley) model, no cross-device stitching beyond the identifier columns in the CSV (or GA4 `user_id`, for the importer), no ad-platform connectors.
 - **The GA4 importer is fixture-verified only.** It reads `session_start` and one conversion event, follows GA4's last non-direct session source for untagged sessions, skips consent-denied traffic, and has not been run against a real export. See [its limits](docs/importers/ga4-bigquery.md#known-limits).
+- **The MCP server is local and read-mostly.** It runs over stdio only (no HTTP transport), is not published to any MCP registry or package index, and `import_ga4` is its only tool that writes (a new CSV, never overwriting). `dataset_id` calls poll the API for up to 60 s (`RABBIT_MCP_POLL_TIMEOUT`) and cancel the analysis if it hasn't finished; a 429 is retried after its `Retry-After` within that time.
 - **Redis is optional but reported.** Without Redis on `localhost:6379`, analysis still works but `/health` returns HTTP 200 with `"status": "unhealthy"`.
 - **Not deployed or published.** There is no hosted instance and no package; run it locally.
 - **Frontend and Docker are not the supported path.** The React app in `frontend/` builds in CI, and Docker Compose files exist, but neither was verified for this README.
@@ -148,7 +323,7 @@ The field mapping, exit codes and limits (time zones, journeys cut at `--start`,
 
 ## Status
 
-Restarted on 2026-10-30 after a pause at milestone M3a. The v1 API above is the supported path. A v2 API runs behind `RABBIT_V2_ENABLED=true` and needs Postgres and Redis. It has API keys, dataset upload and async analyses (M0–M3a), and with M3b one analysis can run one to five models. With two or more, the response adds a comparison block: each channel's credit under each model, the spread between models, and a `model_agreement_score` (1 minus the mean pairwise Jensen-Shannon divergence, so 1.0 means the models split credit identically). That score describes how much the models agree with each other, not which one is right; see [SPEC_v2 §7](docs/api/SPEC_v2.md#7-comparison-math-model_agreement_score). Planned and not built: idempotency keys, cancel, webhooks, an SDK and a deployment ([roadmap](docs/business/ROADMAP.md), [plan](docs/business/PLAN_v2.md)).
+Restarted on 2026-10-30 after a pause at milestone M3a. The v1 API above is the supported path. A v2 API runs behind `RABBIT_V2_ENABLED=true` and needs Postgres and Redis. It has API keys, dataset upload and async analyses (M0–M3a), and with M3b one analysis can run one to five models. With two or more, the response adds a comparison block: each channel's credit under each model, the spread between models, and a `model_agreement_score` (1 minus the mean pairwise Jensen-Shannon divergence, so 1.0 means the models split credit identically). That score describes how much the models agree with each other, not which one is right; see [SPEC_v2 §7](docs/api/SPEC_v2.md#7-comparison-math-model_agreement_score). The engine is also callable from an agent through the local [MCP server](#use-it-from-an-agent-mcp). Planned and not built: idempotency keys, cancel, webhooks, an SDK and a deployment ([roadmap](docs/business/ROADMAP.md), [plan](docs/business/PLAN_v2.md)).
 
 ## Development
 

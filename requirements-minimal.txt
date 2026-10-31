@@ -1,9 +1,9 @@
 # Minimal requirements for basic functionality testing
-fastapi==0.104.1
-uvicorn==0.24.0
+fastapi==0.115.14
+uvicorn==0.54.0
 python-multipart==0.0.31
-pydantic==2.5.0
-pydantic-settings==2.1.0
+pydantic==2.14.1
+pydantic-settings==2.16.0
 pytest==9.0.3
 pytest-asyncio==1.4.1
-httpx==0.25.2
+httpx==0.28.1
