@@ -36,6 +36,9 @@ boto3==1.43.122
 python-ulid==4.1.0
 PyNaCl==1.6.2
 
+# GA4 BigQuery export importer (read-only; src/importers/ga4_bigquery.py)
+google-cloud-bigquery==3.46.2
+
 # System monitoring
 psutil==5.9.6
 

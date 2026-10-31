@@ -160,6 +160,8 @@ Thumbs.db
 !**/tsconfig*.json
 !**/.eslintrc.json
 !tests/v2/golden/*.json
+!tests/fixtures/ga4/*.json
+!tests/fixtures/ga4/*.csv
 data/
 logs/
 temp/
