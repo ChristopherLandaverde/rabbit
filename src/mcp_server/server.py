@@ -210,9 +210,19 @@ def _api_client(base_url: str):
 
 def _api(client, method: str, path: str, key: str, headers: dict | None = None,
          **kwargs) -> dict[str, Any]:
-    response = client.request(
-        method, path, headers={**(headers or {}), "Authorization": f"Bearer {key}"}, **kwargs
-    )
+    import httpx
+
+    try:
+        response = client.request(
+            method, path, headers={**(headers or {}), "Authorization": f"Bearer {key}"},
+            **kwargs,
+        )
+    except httpx.TransportError as exc:  # connect failures, timeouts, resets
+        raise ToolFailure(
+            "api_unreachable",
+            f"Could not reach the Rabbit API for {method} {path}: {type(exc).__name__}.",
+            fix_hint="Check RABBIT_URL and that the API is running.",
+        ) from exc
     try:
         body = response.json()
     except ValueError:
@@ -271,7 +281,14 @@ def _api_analysis(dataset_id: str, models: list[str], options: dict | None) -> d
                 try:
                     _api(client, "POST", f"/v2/analyses/{created['id']}/cancel", key)
                 except ToolFailure:
-                    cancelled = False  # e.g. it finished in the meantime
+                    # Usually 409: it finished between the poll and the cancel.
+                    # Look once more: a succeeded result is returned, and a
+                    # failed one reports its own error below.
+                    cancelled = False
+                    final = _api(client, "GET", f"/v2/analyses/{created['id']}", key)
+                    if final["status"] in ("succeeded", "failed", "cancelled"):
+                        analysis = final
+                        break
                 raise ToolFailure(
                     "analysis_timeout",
                     f"Analysis {created['id']} was still {analysis['status']} after "

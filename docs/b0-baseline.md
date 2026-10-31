@@ -209,13 +209,10 @@ attribution code changed; `test_five_models_on_test_data_csv_unchanged` and
 the v1 comparison tests still pass. Local run on Python 3.12 without Docker:
 
 ```text
-python -m pytest -q --ignore=tests/v2
-325 passed, 14 skipped, 52 xfailed
-
-python -m pytest -q tests/v2
-219 passed, 1 skipped, 1 error
+python -m pytest -q          # one process
+552 passed, 15 skipped, 52 xfailed, 1 error
 ```
 
 The one error is `test_postgres_container_migration`, which needs Docker
-locally; CI runs it against its Postgres service. The v2 total includes 46 new
-tests in `tests/v2/test_mcp_server.py` (on top of #67's 173).
+locally; CI runs it against its Postgres service. The total includes 53 new
+tests in `tests/v2/test_mcp_server.py` (on top of #67's 499).

@@ -635,3 +635,78 @@ def test_default_poll_timeout_is_sixty_seconds():
 def test_dataset_quality_missing_file_is_a_tool_error():
     err = error(call("dataset_quality", {"touchpoints_path": "/nonexistent/rabbit/t.csv"}))
     assert err["code"] == "file_not_found"
+
+
+def test_finished_during_cancel_returns_the_result(monkeypatch):
+    """Poll times out while queued, cancel gets 409 because the analysis just
+    finished; one re-fetch returns the succeeded result."""
+    import httpx
+
+    gets = []
+
+    def handler(request):
+        path = request.url.path
+        if request.method == "POST" and path == "/v2/analyses":
+            return httpx.Response(202, json={"id": "an_1", "status": "queued"})
+        if request.method == "POST" and path.endswith("/cancel"):
+            return httpx.Response(409, json={"code": "analysis_not_cancellable",
+                                             "detail": "Analysis an_1 is succeeded."})
+        gets.append(request)
+        if len(gets) == 1:
+            return httpx.Response(200, json={**SUCCEEDED, "status": "queued"})
+        return httpx.Response(200, json=SUCCEEDED)
+
+    monkeypatch.setenv("RABBIT_MCP_POLL_TIMEOUT", "0")
+    _mock_api(monkeypatch, handler)
+    body = ok(call("run_models", {"dataset_id": "ds_1", "models": ["linear"]}))
+    assert body["source"]["analysis_id"] == "an_1"
+    assert len(gets) == 2
+
+
+def test_failed_during_cancel_reports_its_own_error(monkeypatch):
+    import httpx
+
+    gets = []
+
+    def handler(request):
+        if request.method == "POST" and request.url.path == "/v2/analyses":
+            return httpx.Response(202, json={"id": "an_1", "status": "queued"})
+        if request.url.path.endswith("/cancel"):
+            return httpx.Response(409, json={"code": "analysis_not_cancellable", "detail": "x"})
+        gets.append(request)
+        if len(gets) == 1:
+            return httpx.Response(200, json={**SUCCEEDED, "status": "running"})
+        return httpx.Response(200, json={**SUCCEEDED, "status": "failed", "results": None,
+                                         "error": {"code": "worker_timeout", "message": "w"}})
+
+    monkeypatch.setenv("RABBIT_MCP_POLL_TIMEOUT", "0")
+    _mock_api(monkeypatch, handler)
+    assert error(call("run_models", {"dataset_id": "ds_1"}))["code"] == "worker_timeout"
+
+
+@pytest.mark.parametrize("exc", ["ConnectError", "ReadTimeout", "ConnectTimeout",
+                                 "RemoteProtocolError"])
+def test_network_errors_are_api_unreachable(monkeypatch, exc):
+    import httpx
+
+    def handler(request):
+        raise getattr(httpx, exc)("made-up network failure", request=request)
+
+    _mock_api(monkeypatch, handler)
+    for tool in ("run_models", "compare_models", "dataset_quality"):
+        err = error(call(tool, {"dataset_id": "ds_1"}))
+        assert err["code"] == "api_unreachable", (tool, err)
+        assert exc in err["message"]
+
+
+def test_unreachable_real_port_is_api_unreachable(monkeypatch):
+    """No mock: a closed loopback port gives a real httpx ConnectError."""
+    import socket
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]  # closed once the block exits
+    monkeypatch.setenv("RABBIT_URL", f"http://127.0.0.1:{port}")
+    monkeypatch.setenv("RABBIT_API_KEY", "rk_test_fromenv")
+    monkeypatch.setattr(rabbit_mcp, "API_CLIENT_FACTORY", None)
+    assert error(call("dataset_quality", {"dataset_id": "ds_1"}))["code"] == "api_unreachable"
