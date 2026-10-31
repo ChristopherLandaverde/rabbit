@@ -96,3 +96,29 @@ def test_v1_analyze_reports_rows_dropped():
     assert asyncio.run(run(NUMERIC_IDS_CSV)) == 0
     assert asyncio.run(run((ROOT / "test_data.csv").read_bytes())) == 0
     assert asyncio.run(run(NUMERIC_IDS_CSV.replace(b"50.0", b"-50.0"))) == 1
+
+
+def test_dropped_row_reasons_are_collected_without_touching_stdout(capsys, monkeypatch):
+    """The upload check gets drop reasons from the builder, not by redirecting
+    process-wide stdout (which races across threads)."""
+    import contextlib
+
+    from src.core.identity.journey_builder import JourneyBuilder
+    from src.v2.datasets import _dropped_row_warnings
+
+    def no_redirect(*args, **kwargs):
+        raise AssertionError("redirect_stdout must not be used")
+
+    monkeypatch.setattr(contextlib, "redirect_stdout", no_redirect)
+    bad = _read_frame(NUMERIC_IDS_CSV.replace(b"50.0", b"-50.0"), "csv")
+    warnings = _dropped_row_warnings(bad)
+    assert capsys.readouterr().out == ""
+    assert len(warnings) == 1
+    assert "First reason: Error creating touchpoint at index" in warnings[0].message
+    assert warnings[0].message.endswith("1 validation error for Touchpoint")
+
+    # Without an errors list the builder still prints, as the models expect.
+    frame = bad.copy()
+    frame["timestamp"] = __import__("pandas").to_datetime(frame["timestamp"])
+    JourneyBuilder()._create_touchpoints(frame)
+    assert "Error creating touchpoint" in capsys.readouterr().out

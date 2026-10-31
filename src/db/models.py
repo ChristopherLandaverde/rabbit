@@ -26,6 +26,10 @@ class ApiKey(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     scopes: Mapped[list[str]] = mapped_column(JSON_VALUE, nullable=False)
     rate_limit_per_minute: Mapped[int | None] = mapped_column(Integer)
+    # In-flight (queued or running) analyses this key may have at once (#18).
+    max_concurrent_analyses: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=3, server_default="3"
+    )
     is_test: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

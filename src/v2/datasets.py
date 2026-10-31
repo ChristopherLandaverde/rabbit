@@ -2,7 +2,6 @@
 
 import base64
 import hashlib
-import io
 import json
 import os
 from datetime import datetime, timezone
@@ -96,24 +95,20 @@ def _dropped_row_warnings(frame: pd.DataFrame) -> list[ValidationIssue]:
     Builds touchpoints the way analyses do and reports how many rows fall out
     and the first reason, so data loss is visible at upload time.
     """
-    from contextlib import redirect_stdout
-
     from ..core.identity.journey_builder import JourneyBuilder
 
     normalized = frame.copy()
     normalized.columns = normalized.columns.str.lower()
     if "timestamp" in normalized.columns:
         normalized["timestamp"] = pd.to_datetime(normalized["timestamp"], errors="coerce")
-    log = io.StringIO()
-    with redirect_stdout(log):
-        built = JourneyBuilder()._create_touchpoints(normalized)
+    # Collect reasons rather than redirecting stdout, which is process-wide
+    # and races with other threads.
+    errors: list[str] = []
+    built = JourneyBuilder()._create_touchpoints(normalized, errors=errors)
     dropped = len(normalized) - len(built)
     if dropped <= 0:
         return []
-    reason = next(
-        (line.strip() for line in log.getvalue().splitlines() if line.startswith("Error creating")),
-        "",
-    )
+    reason = errors[0].splitlines()[0].strip() if errors else ""
     return [
         ValidationIssue(
             code="rows_dropped",

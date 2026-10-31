@@ -4,7 +4,9 @@ from fastapi.responses import JSONResponse
 
 
 class ApiProblem(Exception):
-    def __init__(self, status: int, code: str, title: str, detail: str, fix_hint: str, doc_url: str):
+    def __init__(self, status: int, code: str, title: str, detail: str, fix_hint: str, doc_url: str,
+                 headers: dict[str, str] | None = None):
+        self.headers = headers or {}
         self.status = status
         self.code = code
         self.title = title
