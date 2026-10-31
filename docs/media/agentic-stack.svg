@@ -27,7 +27,7 @@
   <rect x="24" y="176" width="832" height="100" rx="12" fill="#EBE8DE" stroke="#10231F" stroke-opacity="0.22" stroke-width="1.5"/>
   <text x="48" y="204" class="mono" font-size="12" font-weight="600" letter-spacing="1" fill="#426B5D">3 · YOUR AGENT</text>
   <text x="48" y="234" class="sans" font-size="18" font-weight="600" fill="#10231F">Claude, Cursor, any MCP client</text>
-  <text x="48" y="258" class="sans" font-size="15" fill="#10231F">Picks the tools and explains results; quotes every number from a tool.</text>
+  <text x="48" y="258" class="sans" font-size="15" fill="#10231F">Picks the tools and explains results; told to quote every number from a tool.</text>
   <rect x="644" y="192" width="188" height="28" rx="14" fill="#D7FF69"/>
   <text x="738" y="211" class="mono" font-size="12.5" font-weight="600" fill="#10231F" text-anchor="middle">L3 live read</text>
   <text x="832" y="240" class="mono" font-size="12" fill="#426B5D" text-anchor="end">fixture-verified</text>

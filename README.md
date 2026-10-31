@@ -55,9 +55,9 @@ Paid search touched 2 of the 3 journeys and gets nothing under either single-tou
 | Ask your agent… | Tool | Reads | Writes |
 |---|---|---|---|
 | "Is `/abs/path/touchpoints.csv` ready to analyse?" | `dataset_quality` | The CSV, or a dataset on your Rabbit v2 API | Nothing |
-| "Give me each channel's credit under last-touch and linear." | `run_models` | The CSV or dataset | Nothing (with a `dataset_id`, one analysis record on your own Rabbit API) |
-| "How far do first-touch and last-touch disagree on this file?" | `compare_models` | The CSV or dataset | Nothing (as `run_models`) |
-| "Import purchases from `analytics_123456789` for 1–15 March, then compare all five models." | `import_ga4`, then `compare_models` | Your GA4 BigQuery export: one `SELECT`, after a dry-run byte estimate and under a `max_bytes` cap | One new local CSV, never overwriting |
+| "Give me each channel's credit under last-touch and linear." | `run_models` | The CSV or dataset | Nothing for a CSV; with a `dataset_id`, one analysis record on your own Rabbit API |
+| "How far do first-touch and last-touch disagree on this file?" | `compare_models` | The CSV or dataset | As `run_models` |
+| "Import purchases from `analytics_123456789` for 1–15 March, then compare all five models." | `import_ga4`, then `compare_models` | Your GA4 BigQuery export: one `SELECT`, after a dry-run byte estimate and under a `max_bytes` cap; the query is billed to your GCP project | One new local CSV, never overwriting |
 
 Agentic levels: L1 machine-readable · L2 agent-callable · L3 live read. Rabbit: L2 agent-callable (`rabbit-mcp`) · L3 live read (fixture-verified: the GA4 importer is tested against hand-built GA4-shaped rows through a mocked BigQuery client, not yet a real export) · L1 pending a versioned output schema with schema-pinning tests ([#69](https://github.com/ChristopherLandaverde/rabbit/issues/69)). No L4: nothing writes to your accounts (`import_ga4` writes only a new local CSV).
 
