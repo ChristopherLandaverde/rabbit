@@ -59,7 +59,7 @@ Paid search touched 2 of the 3 journeys and gets nothing under either single-tou
 | "How far do first-touch and last-touch disagree on this file?" | `compare_models` | The CSV or dataset | Nothing (as `run_models`) |
 | "Import purchases from `analytics_123456789` for 1–15 March, then compare all five models." | `import_ga4`, then `compare_models` | Your GA4 BigQuery export: one `SELECT`, after a dry-run byte estimate and under a `max_bytes` cap | One new local CSV, never overwriting |
 
-Agentic levels: L1 machine-readable · L2 agent-callable · L3 live read · L4 proposes changes for you to approve. Rabbit: L2 agent-callable (`rabbit-mcp`) · L3 live read (fixture-verified: the GA4 importer is tested against hand-built GA4-shaped rows through a mocked BigQuery client, not yet a real export) · L1 pending a versioned output schema with schema-pinning tests ([#69](https://github.com/ChristopherLandaverde/rabbit/issues/69)).
+Agentic levels: L1 machine-readable · L2 agent-callable · L3 live read. Rabbit: L2 agent-callable (`rabbit-mcp`) · L3 live read (fixture-verified: the GA4 importer is tested against hand-built GA4-shaped rows through a mocked BigQuery client, not yet a real export) · L1 pending a versioned output schema with schema-pinning tests ([#69](https://github.com/ChristopherLandaverde/rabbit/issues/69)). No L4: nothing writes to your accounts (`import_ga4` writes only a new local CSV).
 
 Details: [Use it from an agent (MCP)](#use-it-from-an-agent-mcp) for setup and real tool calls, [Live import from GA4 BigQuery](#live-import-from-ga4-bigquery) for scopes, roles and cost guards, and [SPEC_v2](docs/api/SPEC_v2.md) for idempotency, the per-key cap and cancel.
 
