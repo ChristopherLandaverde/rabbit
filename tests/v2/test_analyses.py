@@ -1,6 +1,8 @@
-"""Single-model async analysis: submit, poll, and read results (#16)."""
+"""Async analyses: submit, poll, and read results (#16) and comparisons (#17)."""
 
 import asyncio
+import json
+import math
 import time
 from pathlib import Path
 
@@ -235,10 +237,18 @@ def test_touchpoint_cap_returns_413(client, make_key, storage_dir):
     [
         ({"models": []}, "validation_failed"),
         ({"models": ["markov"]}, "unknown_model"),
-        ({"models": ["linear", "first_touch"]}, "too_many_models"),
+        ({"models": ["linear", "first_touch", "last_touch", "time_decay", "position_based", "linear"]}, "too_many_models"),
+        ({"models": ["linear", "linear"]}, "validation_failed"),
         ({"models": ["linear"], "options": {"time_decay_half_life_days": 0}}, "validation_failed"),
         ({"models": ["position_based"], "options": {"position_based_weights": {"first": 0.7, "last": 0.6}}}, "validation_failed"),
-        ({"models": ["linear"], "options": {"conversion_window_days": 30}}, "validation_failed"),
+        ({"models": ["linear"], "options": {"conversion_window_days": 0}}, "validation_failed"),
+        ({"models": ["linear"], "options": {"conversion_window_days": -30}}, "validation_failed"),
+        ({"models": ["linear"], "options": {"conversion_window_days": 1.5}}, "validation_failed"),
+        ({"models": ["linear"], "options": {"conversion_window_days": True}}, "validation_failed"),
+        ({"models": ["linear"], "options": {"conversion_window_days": "30"}}, "validation_failed"),
+        ({"models": ["linear"], "options": {"conversion_window_days": 3651}}, "validation_failed"),
+        ({"models": ["linear"], "options": {"conversion_window_days": 1e308}}, "validation_failed"),
+        ({"models": ["linear"], "options": {"lookback": 30}}, "validation_failed"),
     ],
 )
 def test_rejects_invalid_model_requests(client, make_key, storage_dir, body, code):
@@ -463,3 +473,277 @@ def test_ten_thousand_row_analysis_p95_under_30_seconds(client, make_key, storag
         assert analysis["status"] == "succeeded"
     # With three samples, the maximum is an upper bound on p95.
     assert max(durations) < 30, durations
+
+
+# --- Multi-model analyses and the comparison block (#17) ---------------------
+
+FIVE_MODELS = ["linear", "time_decay", "first_touch", "last_touch", "position_based"]
+GOLDEN = json.loads((Path(__file__).parent / "golden" / "jsd_golden.json").read_text())
+
+# Two customers, each touched by social and then converting on email.
+# first_touch = {social: 1}, last_touch = {email: 1}, linear = {social: .5, email: .5}.
+SOCIAL_THEN_EMAIL = (
+    b"timestamp,channel,event_type,customer_id,conversion_value\n"
+    b"2026-09-01T10:00:00Z,social,click,c1,0\n"
+    b"2026-09-01T12:00:00Z,email,conversion,c1,40.00\n"
+    b"2026-09-02T10:00:00Z,social,click,c2,0\n"
+    b"2026-09-02T12:00:00Z,email,conversion,c2,60.00\n"
+)
+
+
+def _run(client, key, dataset_id, models, options=None, query=""):
+    body = {"dataset_id": dataset_id, "models": models}
+    if options is not None:
+        body["options"] = options
+    submitted = client.post("/v2/analyses", headers=_headers(key), json=body)
+    assert submitted.status_code == 202, submitted.text
+    created = submitted.json()
+    analysis = client.get(f"/v2/analyses/{created['id']}{query}", headers=_headers(key))
+    assert analysis.status_code == 200, analysis.text
+    return created, analysis.json()
+
+
+def test_five_model_analysis_returns_results_and_comparison(client, make_key, storage_dir):
+    key = make_key(client, scopes=ALL_SCOPES)
+    content = REFERENCE.read_bytes()
+    dataset_id = _upload(client, key, content=content)
+    created, analysis = _run(client, key, dataset_id, FIVE_MODELS)
+
+    assert created["models"] == FIVE_MODELS
+    assert analysis["status"] == "succeeded", analysis
+    assert analysis["progress"] == {"models_completed": 5, "models_total": 5}
+    assert set(analysis["results"]) == set(FIVE_MODELS)  # JSONB does not keep key order
+
+    # Every model's credits are unchanged from v1 /attribution/analyze.
+    for model in FIVE_MODELS:
+        expected = _v1_credits(client, content, model)["channel_attributions"]
+        got = analysis["results"][model]["channels"]
+        assert {c: v["credit"] for c, v in got.items()} == {
+            c: v["credit"] for c, v in expected.items()
+        }
+
+    comparison = analysis["comparison"]
+    assert comparison["model_agreement_method"] == "jensen_shannon"
+    result_channels = set().union(*(analysis["results"][m]["channels"] for m in FIVE_MODELS))
+    assert set(comparison["channels"]) == result_channels
+    for channel, entry in comparison["channels"].items():
+        # Thin (C4): channel keys and per-model credit only; no revenue or conversions.
+        assert set(entry) == {
+            "credit_by_model", "credit_spread", "most_favorable_model", "least_favorable_model",
+        }
+        assert set(entry["credit_by_model"]) == set(FIVE_MODELS)
+        for model, credit in entry["credit_by_model"].items():
+            channels = analysis["results"][model]["channels"]
+            assert credit == (channels[channel]["credit"] if channel in channels else 0.0)
+        values = entry["credit_by_model"].values()
+        assert entry["credit_spread"] == pytest.approx(max(values) - min(values))
+        assert entry["credit_by_model"][entry["most_favorable_model"]] == max(values)
+        assert entry["credit_by_model"][entry["least_favorable_model"]] == min(values)
+
+    # paid_search gets nothing under either single-touch model (README table).
+    paid = comparison["channels"]["paid_search"]
+    assert paid["credit_by_model"]["first_touch"] == 0.0
+    assert paid["credit_by_model"]["last_touch"] == 0.0
+    assert paid["least_favorable_model"] == "first_touch"
+
+    recorded = GOLDEN["recorded_cases"]["test_data_csv_five_models"]
+    assert recorded["models"] == FIVE_MODELS
+    assert comparison["model_agreement_score"] == pytest.approx(
+        recorded["model_agreement_score"], abs=1e-12
+    )
+    assert "impact" not in str(comparison).lower()
+
+
+def test_agreement_score_end_to_end_matches_hand_computed_value(client, make_key, storage_dir):
+    key = make_key(client, scopes=ALL_SCOPES)
+    dataset_id = _upload(client, key, content=SOCIAL_THEN_EMAIL)
+
+    # first_touch {social: 1} vs last_touch {email: 1}: disjoint, JSD = 1, agreement 0.
+    _, disjoint = _run(client, key, dataset_id, ["first_touch", "last_touch"])
+    assert disjoint["comparison"]["model_agreement_score"] == pytest.approx(0.0, abs=1e-12)
+
+    # Add linear {social: .5, email: .5}. Pairs: (ft, lt) = 1; (ft, linear) and
+    # (lt, linear) are each the golden partial_overlap_subset case,
+    # 1.5 - 0.75 * log2(3). Mean = (4 - 1.5 * log2 3) / 3, so
+    # agreement = 0.5 * log2(3) - 1/3 = 0.4591479170272448.
+    _, three = _run(client, key, dataset_id, ["first_touch", "last_touch", "linear"])
+    assert three["comparison"]["model_agreement_score"] == pytest.approx(
+        0.5 * math.log2(3) - 1 / 3, abs=1e-12
+    )
+    email = three["comparison"]["channels"]["email"]
+    assert email["credit_by_model"] == {"first_touch": 0.0, "last_touch": 1.0, "linear": 0.5}
+    assert email["credit_spread"] == 1.0
+    assert email["most_favorable_model"] == "last_touch"
+    assert email["least_favorable_model"] == "first_touch"
+
+    # Identical distributions agree perfectly (2-touch position_based splits evenly).
+    _, same = _run(client, key, dataset_id, ["linear", "position_based"])
+    assert same["comparison"]["model_agreement_score"] == pytest.approx(1.0, abs=1e-12)
+
+
+def test_single_model_analysis_has_no_comparison(client, make_key, storage_dir):
+    key = make_key(client, scopes=ALL_SCOPES)
+    dataset_id = _upload(client, key, content=REFERENCE.read_bytes())
+    _, analysis = _run(client, key, dataset_id, ["linear"])
+    assert analysis["status"] == "succeeded"
+    assert analysis["comparison"] is None
+
+
+def test_progress_counts_each_completed_model(
+    client, make_key, storage_dir, deferred_worker, monkeypatch
+):
+    from src.db.models import Analysis
+    from src.v2 import analyses
+    from src.v2.datasets import get_storage
+
+    key = make_key(client, scopes=ALL_SCOPES)
+    dataset_id = _upload(client, key, content=REFERENCE.read_bytes())
+    created = client.post(
+        "/v2/analyses",
+        headers=_headers(key),
+        json={"dataset_id": dataset_id, "models": FIVE_MODELS},
+    ).json()
+    factory = client.app.state.test_session_factory
+    real = analyses.compute_model_result
+    seen = []
+
+    async def read_progress():
+        async with factory() as session:
+            return (await session.get(Analysis, created["id"])).progress
+
+    async def drive():
+        loop = asyncio.get_running_loop()
+
+        def spy(frame, model, parameters):
+            # Runs in the worker thread: read committed progress before this model.
+            progress = asyncio.run_coroutine_threadsafe(read_progress(), loop).result(5)
+            seen.append((model, progress["models_completed"], progress["models_total"]))
+            return real(frame, model, parameters)
+
+        monkeypatch.setattr(analyses, "compute_model_result", spy)
+        await analyses.process_queued_analyses(factory, get_storage())
+
+    asyncio.run(drive())
+    assert seen == [(model, index, 5) for index, model in enumerate(FIVE_MODELS)]
+    done = client.get(f"/v2/analyses/{created['id']}", headers=_headers(key)).json()
+    assert done["progress"] == {"models_completed": 5, "models_total": 5}
+
+
+def test_options_apply_to_their_models_in_a_multi_model_analysis(client, make_key, storage_dir):
+    key = make_key(client, scopes=ALL_SCOPES)
+    content = REFERENCE.read_bytes()
+    dataset_id = _upload(client, key, content=content)
+    options = {
+        "time_decay_half_life_days": 0.5,
+        "position_based_weights": {"first": 0.3, "last": 0.5},
+    }
+    created, analysis = _run(client, key, dataset_id, FIVE_MODELS, options)
+    assert created["options"] == options
+    results = analysis["results"]
+    assert results["time_decay"]["parameters"] == {"half_life_days": 0.5}
+    assert results["position_based"]["parameters"]["first_touch_weight"] == 0.3
+    assert results["linear"]["parameters"] == {}
+    for model, params in (
+        ("time_decay", {"half_life_days": 0.5}),
+        ("position_based", {"first_touch_weight": 0.3, "last_touch_weight": 0.5}),
+    ):
+        expected = _v1_credits(client, content, model, **params)["channel_attributions"]
+        assert {c: v["credit"] for c, v in results[model]["channels"].items()} == {
+            c: v["credit"] for c, v in expected.items()
+        }
+
+
+def test_conversion_window_excludes_touchpoints_older_than_the_window(
+    client, make_key, storage_dir
+):
+    # social 40 days before the conversion, paid_search 1 day before, conversion on email.
+    content = (
+        b"timestamp,channel,event_type,customer_id,conversion_value\n"
+        b"2026-08-01T10:00:00Z,social,click,c1,0\n"
+        b"2026-09-09T10:00:00Z,paid_search,click,c1,0\n"
+        b"2026-09-10T10:00:00Z,email,conversion,c1,80.00\n"
+    )
+    key = make_key(client, scopes=ALL_SCOPES)
+    dataset_id = _upload(client, key, content=content)
+
+    _, unwindowed = _run(client, key, dataset_id, ["first_touch", "linear"])
+    assert set(unwindowed["results"]["first_touch"]["channels"]) == {"social"}
+
+    _, windowed = _run(
+        client, key, dataset_id, ["first_touch", "linear"], {"conversion_window_days": 30}
+    )
+    results = windowed["results"]
+    assert set(results["first_touch"]["channels"]) == {"paid_search"}
+    assert {c: v["credit"] for c, v in results["linear"]["channels"].items()} == pytest.approx(
+        {"paid_search": 0.5, "email": 0.5}
+    )
+    assert results["linear"]["parameters"] == {"conversion_window_days": 30}
+    assert windowed["summary"]["total_conversions"] == 1
+    assert windowed["summary"]["total_revenue"] == 80.0
+    assert "social" not in windowed["comparison"]["channels"]
+
+    # A window wide enough to cover every touchpoint changes nothing.
+    _, wide = _run(
+        client, key, dataset_id, ["first_touch", "linear"], {"conversion_window_days": 90}
+    )
+    assert wide["results"]["linear"]["channels"] == unwindowed["results"]["linear"]["channels"]
+
+
+def test_journey_block_is_opt_in(client, make_key, storage_dir):
+    key = make_key(client, scopes=ALL_SCOPES)
+    dataset_id = _upload(client, key, content=REFERENCE.read_bytes())
+    created, plain = _run(client, key, dataset_id, ["linear", "last_touch"])
+    assert "journey" not in plain
+
+    url = f"/v2/analyses/{created['id']}"
+    with_journey = client.get(f"{url}?include=journey", headers=_headers(key))
+    assert with_journey.status_code == 200
+    body = with_journey.json()
+    assert body["comparison"] == plain["comparison"]
+    journey = body["journey"]
+    assert set(journey) == {"journey_lengths", "conversion_paths", "time_to_conversion"}
+    assert journey["journey_lengths"]["average_length"] == pytest.approx(10 / 3)
+    assert journey["journey_lengths"]["length_distribution"]["3_5_touchpoints"] == 3
+    paths = {p["path"]: p["frequency"] for p in journey["conversion_paths"]["top_paths"]}
+    assert paths == {
+        "email -> paid_search -> social -> email": 1,
+        "organic -> paid_search -> email": 1,
+        "social -> email -> organic": 1,
+    }
+    assert journey["time_to_conversion"]["time_distribution"]["same_day"] == 3
+    # The descriptive block carries none of the analyzer's rule-generated advice.
+    assert "insights" not in str(journey)
+
+    bad = client.get(f"{url}?include=bogus", headers=_headers(key))
+    assert bad.status_code == 422
+    assert bad.json()["code"] == "validation_failed"
+
+
+def test_journey_and_comparison_are_null_until_the_analysis_succeeds(
+    client, make_key, storage_dir, deferred_worker
+):
+    key = make_key(client, scopes=ALL_SCOPES)
+    dataset_id = _upload(client, key)
+    created = client.post(
+        "/v2/analyses",
+        headers=_headers(key),
+        json={"dataset_id": dataset_id, "models": ["linear", "last_touch"]},
+    ).json()
+    assert created["progress"] is None
+    queued = client.get(
+        f"/v2/analyses/{created['id']}?include=journey", headers=_headers(key)
+    ).json()
+    assert queued["status"] == "queued"
+    assert queued["journey"] is None
+    assert queued["comparison"] is None
+
+
+def test_ten_thousand_row_five_model_analysis_under_30_seconds(client, make_key, storage_dir):
+    key = make_key(client, scopes=ALL_SCOPES)
+    dataset_id = _upload(client, key, content=_ten_thousand_rows())
+    started = time.perf_counter()
+    _, analysis = _run(client, key, dataset_id, FIVE_MODELS)
+    elapsed = time.perf_counter() - started
+    assert analysis["status"] == "succeeded"
+    assert analysis["comparison"]["model_agreement_score"] is not None
+    assert elapsed < 30, elapsed
