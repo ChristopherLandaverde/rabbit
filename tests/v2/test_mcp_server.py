@@ -423,3 +423,215 @@ def test_stdio_server_runs_as_a_module_and_keeps_stdout_clean(tmp_path):
     assert {tool.name for tool in tools.tools} == TOOLS
     body = ok(result)
     assert credits(body["results"]["linear"]) == pytest.approx(TEST_DATA_GOLDEN["linear"])
+
+
+def _noisy_touchpoints(tmp_path):
+    """test_data.csv with negative conversion values: the journey builder
+    prints an "Error creating touchpoint" block to stdout for each one."""
+    frame = pd.read_csv(TEST_DATA, dtype=str, keep_default_na=False)
+    frame.loc[frame["event_type"] == "conversion", "conversion_value"] = "-5"
+    path = tmp_path / "noisy.csv"
+    frame.to_csv(path, index=False)
+    return path
+
+
+def test_concurrent_calls_over_real_stdio_keep_stdout_pure_json_rpc(tmp_path):
+    """Engine prints during concurrent tool calls must not reach the protocol
+    stream: every stdout line parses as JSON-RPC and every call gets a reply."""
+    noisy = str(_noisy_touchpoints(tmp_path))
+    calls = []
+    for index in range(12):
+        name = ("run_models", "compare_models", "dataset_quality")[index % 3]
+        args = {"touchpoints_path": noisy}
+        calls.append({"jsonrpc": "2.0", "id": 100 + index, "method": "tools/call",
+                      "params": {"name": name, "arguments": args}})
+
+    async def go():
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "src.mcp_server",
+            cwd=str(tmp_path), env={**os.environ, "PYTHONPATH": str(ROOT)},
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        def send(message):
+            process.stdin.write((json.dumps(message) + "\n").encode())
+
+        send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "stdio-purity-test", "version": "0"}}})
+        send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        for call in calls:  # all at once: the server handles them concurrently
+            send(call)
+        await process.stdin.drain()
+
+        lines, replies = [], {}
+        wanted = {1} | {call["id"] for call in calls}
+        try:
+            while not wanted <= set(replies):
+                raw = await asyncio.wait_for(process.stdout.readline(), timeout=60)
+                if not raw:
+                    break
+                lines.append(raw.decode())
+                try:
+                    message = json.loads(raw)
+                except ValueError:
+                    continue
+                if isinstance(message, dict) and "id" in message:
+                    replies[message["id"]] = message
+        finally:
+            process.stdin.close()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=10)
+            except TimeoutError:
+                process.kill()
+                await process.wait()
+            stderr = (await process.stderr.read()).decode()
+        return lines, replies, stderr
+
+    lines, replies, stderr = asyncio.run(go())
+    for line in lines:
+        message = json.loads(line)  # fails on any non-JSON line
+        assert message.get("jsonrpc") == "2.0", line
+    assert set(replies) == {1} | {call["id"] for call in calls}
+    for call in calls:
+        assert "result" in replies[call["id"]], replies[call["id"]]
+    # The prints happened; they went to stderr.
+    assert "Error creating touchpoint" in stderr
+
+
+# --- v2 API client hardening ---------------------------------------------------------
+
+
+def _mock_api(monkeypatch, handler):
+    """Serve the MCP server's API calls from ``handler`` (an httpx MockTransport)."""
+    import httpx
+
+    seen = []
+
+    def record(request):
+        seen.append(request)
+        return handler(request)
+
+    monkeypatch.setenv("RABBIT_URL", "https://rabbit.example")
+    monkeypatch.setenv("RABBIT_API_KEY", "rk_test_fromenv")
+    monkeypatch.setattr(
+        rabbit_mcp, "API_CLIENT_FACTORY",
+        lambda base_url: httpx.Client(base_url=base_url, transport=httpx.MockTransport(record)),
+    )
+    sleeps = []
+    monkeypatch.setattr(rabbit_mcp.time, "sleep", sleeps.append)
+    return seen, sleeps
+
+
+SUCCEEDED = {"id": "an_1", "status": "succeeded", "models": ["linear"], "summary": {},
+             "results": {"linear": {"model": "linear", "parameters": {}, "channels": {}}},
+             "comparison": None,
+             "interpretation": {"type": "association", "statement": "x"}}
+
+
+def test_analysis_post_sends_an_idempotency_key_and_retries_429(monkeypatch):
+    import httpx
+
+    posts = []
+
+    def handler(request):
+        if request.method == "POST" and request.url.path == "/v2/analyses":
+            posts.append(request)
+            if len(posts) == 1:
+                return httpx.Response(429, headers={"Retry-After": "7"}, json={
+                    "code": "too_many_in_flight_analyses", "detail": "busy"})
+            return httpx.Response(202, json={"id": "an_1", "status": "queued"})
+        return httpx.Response(200, json=SUCCEEDED)
+
+    seen, sleeps = _mock_api(monkeypatch, handler)
+    ok(call("run_models", {"dataset_id": "ds_1", "models": ["linear"]}))
+    assert len(posts) == 2
+    keys = {request.headers["Idempotency-Key"] for request in posts}
+    assert len(keys) == 1 and keys.pop().startswith("rabbit-mcp-")
+    assert sleeps[0] == 7.0  # waited the server's Retry-After
+    assert all(r.headers["Authorization"] == "Bearer rk_test_fromenv" for r in seen)
+
+
+def test_429_past_the_deadline_is_a_structured_error(monkeypatch):
+    import httpx
+
+    def handler(request):
+        return httpx.Response(429, headers={"Retry-After": "30"}, json={
+            "code": "too_many_in_flight_analyses", "detail": "busy", "fix_hint": "wait"})
+
+    monkeypatch.setenv("RABBIT_MCP_POLL_TIMEOUT", "5")
+    _mock_api(monkeypatch, handler)
+    err = error(call("run_models", {"dataset_id": "ds_1"}))
+    assert (err["code"], err["status"], err["retry_after"]) == (
+        "too_many_in_flight_analyses", 429, "30")
+
+
+@pytest.mark.parametrize("body", [["not", "an", "object"], "oops", None])
+def test_non_object_error_bodies_are_structured_errors(monkeypatch, body):
+    import httpx
+
+    def handler(request):
+        if body is None:
+            return httpx.Response(502, text="<html>bad gateway</html>")
+        return httpx.Response(500, json=body)
+
+    _mock_api(monkeypatch, handler)
+    for tool in ("run_models", "dataset_quality"):
+        err = error(call(tool, {"dataset_id": "ds_1"}))
+        assert err["code"] == "api_error" and err["status"] in (500, 502)
+
+
+def test_non_object_success_body_is_a_structured_error(monkeypatch):
+    import httpx
+
+    _mock_api(monkeypatch, lambda request: httpx.Response(200, json=[1, 2]))
+    err = error(call("dataset_quality", {"dataset_id": "ds_1"}))
+    assert err["code"] == "api_error"
+
+
+@pytest.mark.parametrize("url,allowed", [
+    ("https://rabbit.example", True),
+    ("http://localhost:8000", True),
+    ("http://127.0.0.1:8000", True),
+    ("http://[::1]:8000", True),
+    ("http://rabbit.example", False),
+    ("http://10.0.0.5:8000", False),
+    ("http://localhost.evil.example", False),
+    ("ftp://rabbit.example", False),
+    ("rabbit.example", False),
+])
+def test_plain_http_api_url_only_for_loopback(monkeypatch, url, allowed):
+    import httpx
+
+    _mock_api(monkeypatch, lambda request: httpx.Response(200, json={
+        "status": "ready", "touchpoint_count": 1, "unique_customers": 1, "validation": {}}))
+    monkeypatch.setenv("RABBIT_URL", url)
+    result = call("dataset_quality", {"dataset_id": "ds_1"})
+    if allowed:
+        ok(result)
+    else:
+        assert error(result)["code"] == "insecure_api_url"
+
+
+def test_poll_timeout_cancels_the_analysis(v2_api, client, monkeypatch):
+    client.app.state.analysis_inline_worker = False  # leave it queued
+    monkeypatch.setenv("RABBIT_MCP_POLL_TIMEOUT", "0")
+    try:
+        err = error(call("run_models", {"dataset_id": v2_api, "models": ["linear"]}))
+    finally:
+        client.app.state.analysis_inline_worker = True
+    assert err["code"] == "analysis_timeout" and err["cancelled"] is True
+    key = os.environ["RABBIT_API_KEY"]
+    analysis = client.get(f"/v2/analyses/{err['analysis_id']}",
+                          headers={"Authorization": f"Bearer {key}"}).json()
+    assert analysis["status"] == "cancelled"
+
+
+def test_default_poll_timeout_is_sixty_seconds():
+    assert rabbit_mcp.DEFAULT_POLL_TIMEOUT_SECONDS == 60
+
+
+def test_dataset_quality_missing_file_is_a_tool_error():
+    err = error(call("dataset_quality", {"touchpoints_path": "/nonexistent/rabbit/t.csv"}))
+    assert err["code"] == "file_not_found"

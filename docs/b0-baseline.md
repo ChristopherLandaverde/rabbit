@@ -206,9 +206,9 @@ python -m pytest -q --ignore=tests/v2
 325 passed, 14 skipped, 52 xfailed
 
 python -m pytest -q tests/v2
-173 passed, 1 skipped, 1 error
+219 passed, 1 skipped, 1 error
 ```
 
 The one error is `test_postgres_container_migration`, which needs Docker
-locally; CI runs it against its Postgres service. The v2 total includes 27 new
-tests in `tests/v2/test_mcp_server.py`.
+locally; CI runs it against its Postgres service. The v2 total includes 46 new
+tests in `tests/v2/test_mcp_server.py` (on top of #67's 173).
