@@ -1,21 +1,38 @@
-# Rabbit
+<p align="center">
+  <img src="docs/media/logo.png" width="96" height="96" alt="Rabbit logo: a paper-coloured rabbit head on a dark green tile, its two ears forking from one point like two attribution paths">
+</p>
 
-**The attribution model you pick moves your budget. See by how much before you commit to one.**
+<h1 align="center">Rabbit</h1>
 
-[![CI](https://github.com/ChristopherLandaverde/rabbit/actions/workflows/ci.yml/badge.svg)](https://github.com/ChristopherLandaverde/rabbit/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <strong>The attribution model you pick moves your budget. See by how much before you commit to one.</strong>
+</p>
 
-[Quick start](#quick-start) · [Same data, five models](#same-data-five-models) · [Known limits](#known-limits) · [Usage guide](docs/usage.md)
+<p align="center">
+  5 rule-based attribution models · self-hosted API · CSV of touchpoints in, each channel's credit share out
+</p>
+
+<p align="center">
+  <a href="https://github.com/ChristopherLandaverde/rabbit/actions/workflows/ci.yml"><img src="https://github.com/ChristopherLandaverde/rabbit/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/ChristopherLandaverde/rabbit?color=10231F" alt="License: MIT"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> · <a href="#same-data-five-models">Same data, five models</a> · <a href="#known-limits">Known limits</a> · <a href="#status">Status</a> · <a href="docs/usage.md">Usage guide</a>
+</p>
 
 On the bundled sample of 10 touchpoints, email gets **33%** of conversion credit under first-touch and **67%** under last-touch. Same data, same conversions; only the model changed.
 
 Rabbit is a small self-hosted API for marketing analysts and RevOps people choosing or defending an attribution model, and for engineers who want an attribution endpoint they run themselves. Post a CSV of touchpoints; get each channel's share of conversion credit under first-touch, last-touch, linear, time-decay or position-based. Results describe attribution under the named model; they do not estimate causal impact.
 
+**Status: paused for new features** after the v2 tracer slice (milestones M0–M3a). The v1 API is the supported path; see [Status](#status).
+
 ## Same data, five models
 
-<img src="docs/media/five-models.gif" width="880" alt="Terminal frames of real Rabbit API output on the bundled test_data.csv: the same curl request run with model_type first_touch, last_touch, linear and position_based. Email's credit share goes 33%, 67%, 39%, 47%; paid_search is absent under first_touch and last_touch, then gets 19% under linear and 10% under position_based.">
-
-Real API responses to the quick-start request below, one model per frame. Channels with no credit are left out of the response. `time_decay` is skipped because it matches `linear` on this sample.
+<p align="center">
+  <img src="docs/media/five-models.gif" width="880" alt="Terminal frames of real Rabbit API output on the bundled test_data.csv: the same curl request run with model_type first_touch, last_touch, linear and position_based. Email's credit share goes 33%, 67%, 39%, 47%; paid_search is absent under first_touch and last_touch, then gets 19% under linear and 10% under position_based.">
+  <br><sub>Real API responses on the bundled <code>test_data.csv</code>, one model per frame, from the quick-start request below. Channels with no credit are left out; <code>time_decay</code> is skipped because it matches <code>linear</code> on this sample.</sub>
+</p>
 
 Share of conversion credit per channel on `test_data.csv` (3 customers, 10 touchpoints, 3 conversions), real API output rounded to whole percent:
 
@@ -90,7 +107,7 @@ Then swap in your own file. The [usage guide](docs/usage.md) covers the input co
 
 ## Status
 
-Paused. The v1 API above is the supported path. A v2 API (API keys, dataset upload, async single-model analysis) is merged up to milestone M3a behind `RABBIT_V2_ENABLED=true` and needs Postgres and Redis. Planned and not built: multi-model comparison in one call (M3b) and everything after it, including webhooks, an SDK and a deployment ([roadmap](docs/business/ROADMAP.md), [plan](docs/business/PLAN_v2.md)).
+Paused for new features after the v2 tracer slice (M0–M3a), by the owner's decision of 2026-10-29. Dependency and bug fixes still land. The v1 API above is the supported path. A v2 API (API keys, dataset upload, async single-model analysis) is merged up to milestone M3a behind `RABBIT_V2_ENABLED=true` and needs Postgres and Redis. Planned and not built: multi-model comparison in one call (M3b) and everything after it, including webhooks, an SDK and a deployment ([roadmap](docs/business/ROADMAP.md), [plan](docs/business/PLAN_v2.md)).
 
 ## Development
 

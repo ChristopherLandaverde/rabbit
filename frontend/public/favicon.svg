@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <title>Rabbit</title>
+  <!-- Tile: Focosys ink (#10231F); mark: Focosys paper (#F3F0E6); accent: Focosys lime (#D7FF69) -->
+  <rect width="128" height="128" rx="28" fill="#10231F"/>
+  <!-- Ears fork from one point, like two attribution paths from one conversion -->
+  <path d="M64 72 L45 21 M64 72 L83 21" fill="none" stroke="#F3F0E6" stroke-width="17" stroke-linecap="round"/>
+  <path d="M60 58 L48 27 M68 58 L80 27" fill="none" stroke="#D7FF69" stroke-width="4.5" stroke-linecap="round"/>
+  <!-- Head and eyes -->
+  <circle cx="64" cy="84" r="27" fill="#F3F0E6"/>
+  <circle cx="54" cy="81" r="4.5" fill="#10231F"/>
+  <circle cx="74" cy="81" r="4.5" fill="#10231F"/>
+</svg>
