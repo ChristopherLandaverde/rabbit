@@ -63,6 +63,7 @@ CONCURRENCY_RETRY_AFTER_SECONDS = 10
 DEFAULT_MAX_RUNTIME_MINUTES = 30
 DEFAULT_STALE_PROGRESS_MINUTES = 5
 JANITOR_INTERVAL_SECONDS = 60
+ANALYSIS_SCHEMA_VERSION = "1"
 
 INTERPRETATION_TYPE = "association"
 ANALYSIS_DESCRIPTION = (
@@ -536,6 +537,7 @@ def _analysis_response(
     include: frozenset[str] = frozenset(),
 ):
     body = {
+        "schemaVersion": ANALYSIS_SCHEMA_VERSION,
         "id": analysis.id,
         "object": "analysis",
         "livemode": livemode,

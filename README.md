@@ -49,7 +49,7 @@ Paid search touched 2 of the 3 journeys and gets nothing under either single-tou
 ## Agentic
 
 <p align="center">
-  <img src="docs/media/agentic-stack.svg" width="880" alt="Rabbit's agentic stack as four layers. Layer 1, engine: 5 attribution models plus the Jensen-Shannon multi-model comparison, the base layer, with L1 pending issue 69. Layer 2, tools: rabbit-mcp, the v2 API and the GA4 BigQuery importer, with the MCP tools import_ga4, run_models, compare_models and dataset_quality, at L2 agent-callable. Layer 3, your agent: Claude, Cursor or any MCP client, at L3 live read, fixture-verified. Layer 4, you approve: nothing writes to your accounts and credits under a named model are evidence for you to act on; L4 not built.">
+  <img src="docs/media/agentic-stack.svg" width="880" alt="Rabbit's agentic stack as four layers. Layer 1, engine: 5 attribution models plus the Jensen-Shannon multi-model comparison, the base layer, at L1 machine-readable with a versioned output schema. Layer 2, tools: rabbit-mcp, the v2 API and the GA4 BigQuery importer, with the MCP tools import_ga4, run_models, compare_models and dataset_quality, at L2 agent-callable. Layer 3, your agent: Claude, Cursor or any MCP client, at L3 live read, fixture-verified. Layer 4, you approve: nothing writes to your accounts and credits under a named model are evidence for you to act on; L4 not built.">
 </p>
 
 | Ask your agent… | Tool | Reads | Writes |
@@ -59,7 +59,7 @@ Paid search touched 2 of the 3 journeys and gets nothing under either single-tou
 | "How far do first-touch and last-touch disagree on this file?" | `compare_models` | The CSV or dataset | As `run_models` |
 | "Import purchases from `analytics_123456789` for 1–15 March, then compare all five models." | `import_ga4`, then `compare_models` | Your GA4 BigQuery export: one `SELECT`, after a dry-run byte estimate and under a `max_bytes` cap; the query is billed to your GCP project | One new local CSV, never overwriting |
 
-Agentic levels: L1 machine-readable · L2 agent-callable · L3 live read. Rabbit: L2 agent-callable (`rabbit-mcp`) · L3 live read (fixture-verified: the GA4 importer is tested against hand-built GA4-shaped rows through a mocked BigQuery client, not yet a real export) · L1 pending a versioned output schema with schema-pinning tests ([#69](https://github.com/ChristopherLandaverde/rabbit/issues/69)). No L4: nothing writes to your accounts (`import_ga4` writes only a new local CSV).
+Agentic levels: L1 machine-readable · L2 agent-callable · L3 live read. Rabbit: L1 machine-readable (every v2 analysis, comparison and `rabbit-mcp` result carries `schemaVersion: "1"`, pinned by tests) · L2 agent-callable (`rabbit-mcp`) · L3 live read (fixture-verified: the GA4 importer is tested against hand-built GA4-shaped rows through a mocked BigQuery client, not yet a real export). No L4: nothing writes to your accounts (`import_ga4` writes only a new local CSV).
 
 Details: [Use it from an agent (MCP)](#use-it-from-an-agent-mcp) for setup and real tool calls, [Live import from GA4 BigQuery](#live-import-from-ga4-bigquery) for scopes, roles and cost guards, and [SPEC_v2](docs/api/SPEC_v2.md) for idempotency, the per-key cap and cancel.
 
@@ -224,6 +224,7 @@ isError=False
     "errors": [],
     "warnings": []
   },
+  "schemaVersion": "1",
   "meaning": "Attribution credits are an association under the named model, not causal impact or incrementality; they do not say what would happen if spend changed."
 }
 
@@ -268,6 +269,7 @@ isError=False
     "type": "association",
     "statement": "Credits show how conversions are shared across channels under each named model (last_touch) and its parameters. They describe an association in this dataset, not causal effect or incrementality."
   },
+  "schemaVersion": "1",
   "meaning": "Attribution credits are an association under the named model, not causal impact or incrementality; they do not say what would happen if spend changed."
 }
 
@@ -283,6 +285,7 @@ isError=False
     "last_touch"
   ],
   "comparison": {
+    "schemaVersion": "1",
     "channels": {
       "email": {
         "credit_by_model": {
@@ -319,6 +322,7 @@ isError=False
     "type": "association",
     "statement": "Credits show how conversions are shared across channels under each named model (first_touch, last_touch) and its parameters. They describe an association in this dataset, not causal effect or incrementality. The comparison shows how far these models' credit splits agree; agreement between models is not evidence that any of them is correct."
   },
+  "schemaVersion": "1",
   "meaning": "Attribution credits are an association under the named model, not causal impact or incrementality; they do not say what would happen if spend changed."
 }
 ```
@@ -341,7 +345,7 @@ isError=False
 
 ## Status
 
-Restarted on 2026-10-30 after a pause at milestone M3a. The v1 API above is the supported path. A v2 API runs behind `RABBIT_V2_ENABLED=true` and needs Postgres and Redis. It has API keys, dataset upload and async analyses (M0–M3a), and with M3b one analysis can run one to five models. With two or more, the response adds a comparison block: each channel's credit under each model, the spread between models, and a `model_agreement_score` (1 minus the mean pairwise Jensen-Shannon divergence, so 1.0 means the models split credit identically). That score describes how much the models agree with each other, not which one is right; see [SPEC_v2 §7](docs/api/SPEC_v2.md#7-comparison-math-model_agreement_score). M3c adds an `Idempotency-Key` header on `POST /v2/analyses` (the same key and body within 24 hours replays the original analysis), a per-key cap on queued and running analyses (3 by default, then 429 with `Retry-After`), and `POST /v2/analyses/{id}/cancel`. The engine is also callable from an agent through the local [MCP server](#use-it-from-an-agent-mcp) (agentic level L2, plus L3 live read through the fixture-verified GA4 importer; see [Agentic](#agentic)). Planned and not built: L1 proper, a versioned output schema with schema-pinning tests ([#69](https://github.com/ChristopherLandaverde/rabbit/issues/69)); a first run against a real GA4 export, which drops the fixture-verified label; webhooks, an SDK and a deployment ([roadmap](docs/business/ROADMAP.md), [plan](docs/business/PLAN_v2.md)).
+Restarted on 2026-10-30 after a pause at milestone M3a. The v1 API above is the supported path. A v2 API runs behind `RABBIT_V2_ENABLED=true` and needs Postgres and Redis. It has API keys, dataset upload and async analyses (M0–M3a), and with M3b one analysis can run one to five models. With two or more, the response adds a comparison block: each channel's credit under each model, the spread between models, and a `model_agreement_score` (1 minus the mean pairwise Jensen-Shannon divergence, so 1.0 means the models split credit identically). That score describes how much the models agree with each other, not which one is right; see [SPEC_v2 §7](docs/api/SPEC_v2.md#7-comparison-math-model_agreement_score). M3c adds an `Idempotency-Key` header on `POST /v2/analyses` (the same key and body within 24 hours replays the original analysis), a per-key cap on queued and running analyses (3 by default, then 429 with `Retry-After`), and `POST /v2/analyses/{id}/cancel`. The engine is also callable from an agent through the local [MCP server](#use-it-from-an-agent-mcp) (agentic levels L1 and L2, plus L3 live read through the fixture-verified GA4 importer; see [Agentic](#agentic)). Planned and not built: a first run against a real GA4 export, which drops the fixture-verified label; webhooks, an SDK and a deployment ([roadmap](docs/business/ROADMAP.md), [plan](docs/business/PLAN_v2.md)).
 
 ## Development
 

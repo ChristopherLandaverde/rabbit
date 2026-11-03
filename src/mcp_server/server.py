@@ -27,12 +27,12 @@ import time
 import uuid
 from io import TextIOWrapper
 from pathlib import Path
-from typing import Annotated, Any, Callable
+from typing import Annotated, Any, Callable, Literal
 
 import anyio
 from mcp.server.fastmcp import FastMCP
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 SERVER_NAME = "rabbit-mcp"
 MEANING = (
@@ -44,11 +44,24 @@ SUPPORTED_EXTENSIONS = {"csv", "json", "parquet"}
 POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_POLL_TIMEOUT_SECONDS = 60
 MAX_RETRY_AFTER_SECONDS = 30
+MCP_SCHEMA_VERSION = "1"
 
 # Test seams. None means: let the importer build its own ADC client, and talk
 # to RABBIT_URL with a plain httpx client.
 BIGQUERY_CLIENT_FACTORY: Callable[[], Any] | None = None
 API_CLIENT_FACTORY: Callable[[str], Any] | None = None
+
+
+class MCPToolOutput(BaseModel):
+    """The stable envelope every rabbit-mcp tool returns."""
+
+    model_config = ConfigDict(extra="allow")
+
+    schemaVersion: Literal["1"]
+    meaning: str
+
+
+MCPToolResult = Annotated[CallToolResult, MCPToolOutput]
 
 
 class ToolFailure(Exception):
@@ -62,7 +75,7 @@ class ToolFailure(Exception):
 
 
 def _result(body: dict[str, Any], is_error: bool = False) -> CallToolResult:
-    body = {**body, "meaning": MEANING}
+    body = {**body, "schemaVersion": MCP_SCHEMA_VERSION, "meaning": MEANING}
     return CallToolResult(
         content=[TextContent(type="text", text=json.dumps(body, default=str))],
         structuredContent=body,
@@ -531,7 +544,7 @@ def build_server() -> FastMCP:
                                                            "(default 10737418240).")] = None,
         out_path: Annotated[str | None, Field(description="Absolute path for the CSV; must "
                                                           "not exist. Default: a temp file.")] = None,
-    ) -> CallToolResult:
+    ) -> MCPToolResult:
         return await _guarded(lambda: _import_ga4(
             project, dataset, start, end, conversion_event, max_bytes, out_path))
 
@@ -550,7 +563,7 @@ def build_server() -> FastMCP:
         dataset_id: DatasetId = None,
         models: Models = None,
         options: Options = None,
-    ) -> CallToolResult:
+    ) -> MCPToolResult:
         return await _guarded(lambda: _run_models(touchpoints_path, dataset_id, models, options))
 
     @server.tool(
@@ -569,7 +582,7 @@ def build_server() -> FastMCP:
         dataset_id: DatasetId = None,
         models: Models = None,
         options: Options = None,
-    ) -> CallToolResult:
+    ) -> MCPToolResult:
         def work():
             if models is not None and len(models) < 2:
                 raise ToolFailure("validation_failed", "compare_models needs 2 to 5 models.",
@@ -598,7 +611,7 @@ def build_server() -> FastMCP:
     async def dataset_quality(
         touchpoints_path: TouchpointsPath = None,
         dataset_id: DatasetId = None,
-    ) -> CallToolResult:
+    ) -> MCPToolResult:
         return await _guarded(lambda: _dataset_quality(touchpoints_path, dataset_id))
 
     return server
