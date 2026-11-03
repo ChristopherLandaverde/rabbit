@@ -187,6 +187,7 @@ def test_no_comparison_for_a_single_model():
 def test_comparison_without_conversions_has_no_channels_and_no_score():
     comparison = build_comparison(["linear", "first_touch"], _results(linear={}, first_touch={}))
     assert comparison == {
+        "schemaVersion": "1",
         "channels": {},
         "model_agreement_score": None,
         "model_agreement_method": "jensen_shannon",

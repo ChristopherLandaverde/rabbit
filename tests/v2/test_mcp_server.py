@@ -34,6 +34,17 @@ ROOT = Path(__file__).resolve().parents[2]
 TEST_DATA = ROOT / "test_data.csv"
 FIVE_MODELS = ["first_touch", "last_touch", "linear", "time_decay", "position_based"]
 TOOLS = {"import_ga4", "run_models", "compare_models", "dataset_quality"}
+MCP_OUTPUT_SCHEMA = {
+    "additionalProperties": True,
+    "description": "The stable envelope every rabbit-mcp tool returns.",
+    "properties": {
+        "meaning": {"title": "Meaning", "type": "string"},
+        "schemaVersion": {"const": "1", "title": "Schemaversion", "type": "string"},
+    },
+    "required": ["schemaVersion", "meaning"],
+    "title": "MCPToolOutput",
+    "type": "object",
+}
 GA4_ARGS = {"project": "demo-project-123", "dataset": "analytics_123456789",
             "start": "20250301", "end": "20250315", "conversion_event": "purchase"}
 
@@ -61,6 +72,7 @@ def ok(result):
     assert result.isError is False, result.content[0].text
     body = result.structuredContent
     assert json.loads(result.content[0].text) == body
+    assert body["schemaVersion"] == "1"
     assert_meaning(body)
     return body
 
@@ -69,6 +81,7 @@ def error(result):
     assert result.isError is True
     body = result.structuredContent
     assert json.loads(result.content[0].text) == body
+    assert body["schemaVersion"] == "1"
     assert_meaning(body)
     return body["error"]
 
@@ -112,6 +125,7 @@ def test_lists_the_four_read_tools_with_the_meaning_sentence():
         assert "association under the named" in description, tool.name
         assert "not causal" in description, tool.name
         assert tool.annotations.destructiveHint is False
+        assert tool.outputSchema == MCP_OUTPUT_SCHEMA
     by_name = {tool.name: tool for tool in tools}
     for name in ("run_models", "compare_models", "dataset_quality"):
         assert by_name[name].annotations.readOnlyHint is True

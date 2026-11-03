@@ -16,6 +16,14 @@ SAMPLE = ROOT / "examples" / "sample_campaigns.csv"
 # regression file test_data.csv separates the models, so both are checked.
 REFERENCE = ROOT / "test_data.csv"
 ALL_SCOPES = ["datasets:write", "datasets:read", "analyses:write", "analyses:read"]
+QUEUED_ANALYSIS_SCHEMA_KEYS = {
+    "schemaVersion", "id", "object", "livemode", "status", "dataset_id", "models", "options",
+    "progress", "interpretation", "created_at", "started_at", "completed_at", "error",
+}
+SUCCEEDED_ANALYSIS_SCHEMA_KEYS = QUEUED_ANALYSIS_SCHEMA_KEYS | {"summary", "results", "comparison"}
+COMPARISON_SCHEMA_KEYS = {
+    "schemaVersion", "channels", "model_agreement_score", "model_agreement_method",
+}
 
 
 def _headers(key):
@@ -143,6 +151,28 @@ def test_linear_on_reference_file_matches_recorded_baseline(client, make_key, st
     assert {c: v["credit"] for c, v in channels.items()} == pytest.approx(
         {c: v / total for c, v in raw.items()}
     )
+
+
+def test_analysis_and_comparison_response_schemas_are_pinned(client, make_key, storage_dir):
+    key = make_key(client, scopes=ALL_SCOPES)
+    dataset_id = _upload(client, key, content=REFERENCE.read_bytes())
+    created = client.post(
+        "/v2/analyses",
+        headers=_headers(key),
+        json={"dataset_id": dataset_id, "models": ["first_touch", "last_touch"]},
+    )
+    assert created.status_code == 202, created.text
+    queued = created.json()
+    assert queued["schemaVersion"] == "1"
+    assert set(queued) == QUEUED_ANALYSIS_SCHEMA_KEYS
+
+    response = client.get(f"/v2/analyses/{queued['id']}", headers=_headers(key))
+    assert response.status_code == 200, response.text
+    analysis = response.json()
+    assert analysis["schemaVersion"] == "1"
+    assert set(analysis) == SUCCEEDED_ANALYSIS_SCHEMA_KEYS
+    assert analysis["comparison"]["schemaVersion"] == "1"
+    assert set(analysis["comparison"]) == COMPARISON_SCHEMA_KEYS
 
 
 def test_result_names_model_parameters_and_states_association_not_causation(

@@ -27,6 +27,7 @@ from itertools import combinations
 from typing import Any
 
 MODEL_AGREEMENT_METHOD = "jensen_shannon"
+COMPARISON_SCHEMA_VERSION = "1"
 
 
 def _distribution(values: Mapping[str, float], keys: Sequence[str]) -> list[float]:
@@ -99,6 +100,7 @@ def build_comparison(models: Sequence[str], results: Mapping[str, Any]) -> dict 
     has_mass = all(math.fsum(c.values()) > 0 for c in credits.values())
     score = model_agreement_score([credits[m] for m in models]) if has_mass else None
     return {
+        "schemaVersion": COMPARISON_SCHEMA_VERSION,
         "channels": block,
         "model_agreement_score": score,
         "model_agreement_method": MODEL_AGREEMENT_METHOD,
