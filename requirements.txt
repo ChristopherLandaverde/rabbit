@@ -1,5 +1,6 @@
 # FastAPI and web framework dependencies
 fastapi==0.115.14
+starlette==0.46.2
 uvicorn[standard]==0.54.0
 python-multipart==0.0.31
 

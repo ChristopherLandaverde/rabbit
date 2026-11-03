@@ -27,7 +27,7 @@ The MCP server (`python -m src.mcp_server`) and its tests need the optional
 `requirements-mcp.txt` too; CI installs it:
 
 ```bash
-uv pip install --python .venv/bin/python -r requirements-mcp.txt
+uv pip install --python .venv/bin/python -r requirements.txt -r requirements-mcp.txt
 ```
 
 Run the complete test suite:
